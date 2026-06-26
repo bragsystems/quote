@@ -17,134 +17,102 @@ input,select,textarea,button{font-family:inherit}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal{background:#fff;border-radius:12px;padding:22px;max-width:540px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.modal{background:#fff;border-radius:12px;padding:22px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+@media print{
+  .no-print{display:none!important}
+  body{background:#fff!important}
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useCallback}=React;
+const {useState,useEffect,useCallback,useRef}=React;
 
-// ══════════════════════════════════════════════════════════
-// SUPABASE CONFIG — replace these two values
-// ══════════════════════════════════════════════════════════
-const SUPA_URL = "https://YOUR_PROJECT_REF.supabase.co";
-const SUPA_KEY = "YOUR_ANON_PUBLIC_KEY";
-// ══════════════════════════════════════════════════════════
-// SUPABASE TABLE SETUP — run this SQL once in your Supabase
-// SQL editor (Database → SQL Editor → New query):
-//
-// create table quotes (
-//   id uuid default gen_random_uuid() primary key,
-//   quote_num text unique not null,
-//   quote_date text,
-//   validity text,
-//   client_name text,
-//   client_company text,
-//   client_city text,
-//   client_email text,
-//   client_phone text,
-//   client_project text,
-//   client_silo_count text,
-//   client_capacity text,
-//   client_grain text,
-//   incoterm text,
-//   pf numeric,
-//   freight numeric,
-//   tax numeric,
-//   sections jsonb,
-//   terms jsonb,
-//   total numeric,
-//   status text default 'draft',
-//   created_at timestamptz default now(),
-//   updated_at timestamptz default now()
-// );
-// alter table quotes enable row level security;
-// create policy "Allow all" on quotes for all using (true);
-// ══════════════════════════════════════════════════════════
+// ── SUPABASE CONFIG ───────────────────────────────────────
+const SUPA_URL="https://YOUR_PROJECT_REF.supabase.co";
+const SUPA_KEY="YOUR_ANON_PUBLIC_KEY";
+let sb=null;
+try{if(!SUPA_URL.includes("YOUR_PROJECT"))sb=window.supabase.createClient(SUPA_URL,SUPA_KEY);}catch(e){}
 
-let sb = null;
-try {
-  if (!SUPA_URL.includes("YOUR_PROJECT")) {
-    sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-  }
-} catch(e) { console.warn("Supabase init failed", e); }
+const O="#E59215",DK="#1A1A1A";
+// Use Rs. instead of ₹ to avoid jsPDF font encoding issues
+const fmtPDF=n=>"Rs. "+Math.round(n||0).toLocaleString("en-IN");
+// For screen display keep ₹
+const fmt=n=>"Rs. "+Math.round(n||0).toLocaleString("en-IN");
+const today=new Date().toISOString().split("T")[0];
 
-const O="#E59215", DK="#1A1A1A";
-const fmt = n => "₹ " + Math.round(n||0).toLocaleString("en-IN");
-const today = new Date().toISOString().split("T")[0];
-
-const DEF_SECTIONS = [
+const DEF_SECTIONS=[
   {id:1,name:"Intake & Reception",open:true,items:[
-    {desc:"Dump Pit Hopper (5T capacity)",qty:1,unit:"Nos",exw:285000,install:42750},
-    {desc:"Drive-Over Heavy Duty Grid (GMS)",qty:1,unit:"Nos",exw:95000,install:14250},
-    {desc:"Intake Dust Aspiration System",qty:1,unit:"Set",exw:175000,install:26250},
+    {desc:"Dump Pit Hopper (5T capacity)",qty:1,unit:"Nos",unitPrice:285000,install:42750,specs:""},
+    {desc:"Drive-Over Heavy Duty Grid (GMS)",qty:1,unit:"Nos",unitPrice:95000,install:14250,specs:""},
+    {desc:"Intake Dust Aspiration System",qty:1,unit:"Set",unitPrice:175000,install:26250,specs:""},
   ]},
   {id:2,name:"Processing & Pre-Conditioning (Cleaning Tower)",open:false,items:[
-    {desc:"Grain Drum Pre-Cleaner / Rotary Scalper (60 TPH)",qty:1,unit:"Nos",exw:425000,install:63750},
-    {desc:"Flat Bed Vibratory Screen Cleaner (Double Deck)",qty:1,unit:"Nos",exw:520000,install:78000},
-    {desc:"Magnetic Separator (Inline)",qty:2,unit:"Nos",exw:85000,install:12750},
-    {desc:"Online Weigher / Bulk Flow Scale",qty:1,unit:"Nos",exw:180000,install:27000},
-    {desc:"Dust Collection System (Cyclone + Baghouse)",qty:1,unit:"Set",exw:650000,install:97500},
-    {desc:"Discharge Chutes & Gravity Spouting",qty:1,unit:"Lot",exw:95000,install:14250},
+    {desc:"Grain Drum Pre-Cleaner / Rotary Scalper (60 TPH)",qty:1,unit:"Nos",unitPrice:425000,install:63750,specs:"60 TPH capacity, MS construction, hot-dip galvanized, 4.5 kW motor"},
+    {desc:"Flat Bed Vibratory Screen Cleaner (Double Deck)",qty:1,unit:"Nos",unitPrice:520000,install:78000,specs:"3-deck MS perforated screen, Top 8mm / Mid 3mm / Bottom 1.5mm mesh"},
+    {desc:"Magnetic Separator (Inline)",qty:2,unit:"Nos",unitPrice:85000,install:12750,specs:"Permanent magnet, 300mm wide, inline type"},
+    {desc:"Online Weigher / Bulk Flow Scale",qty:1,unit:"Nos",unitPrice:180000,install:27000,specs:"Belt type, 60 TPH, accuracy ±0.5%, 4-20mA output"},
+    {desc:"Dust Collection System (Cyclone + Baghouse)",qty:1,unit:"Set",unitPrice:650000,install:97500,specs:"2-stage: hopper cyclone + pulse jet baghouse, 5.5 kW fan"},
+    {desc:"Discharge Chutes & Gravity Spouting",qty:1,unit:"Lot",unitPrice:95000,install:14250,specs:"MS fabricated, 3mm thk, rubber lined at impact points"},
   ]},
   {id:3,name:"Elevating & Conveying (Material Handling)",open:false,items:[
-    {desc:"Bucket Elevator (60 TPH, 25m height)",qty:1,unit:"Nos",exw:980000,install:147000},
-    {desc:"Drag Chain Conveyor (60 TPH, 20m)",qty:2,unit:"Nos",exw:620000,install:93000},
-    {desc:"Belt Conveyor (60 TPH, 30m)",qty:1,unit:"Nos",exw:480000,install:72000},
-    {desc:"Overhead Catwalk / Gallery Structure",qty:1,unit:"Lot",exw:350000,install:52500},
-    {desc:"Distributors / Diverter Valves",qty:4,unit:"Nos",exw:45000,install:6750},
-    {desc:"Cushion Boxes / Deadheads",qty:6,unit:"Nos",exw:18000,install:2700},
+    {desc:"Bucket Elevator (60 TPH, 25m height)",qty:1,unit:"Nos",unitPrice:980000,install:147000,specs:"Centrifugal discharge, EP belt, 6mm MS buckets, 15 kW motor, SKF bearings"},
+    {desc:"Drag Chain Conveyor (60 TPH, 20m)",qty:2,unit:"Nos",unitPrice:620000,install:93000,specs:"EN-class steel chain, 350mm wide trough, 7.5 kW motor, VFD compatible"},
+    {desc:"Belt Conveyor (60 TPH, 30m)",qty:1,unit:"Nos",unitPrice:480000,install:72000,specs:"500mm wide EP belt, 5.5 kW motor, troughed idlers at 35 deg"},
+    {desc:"Overhead Catwalk / Gallery Structure",qty:1,unit:"Lot",unitPrice:350000,install:52500,specs:"MS structural, 900mm wide walkway, handrail both sides, chequered plate floor"},
+    {desc:"Distributors / Diverter Valves",qty:4,unit:"Nos",unitPrice:45000,install:6750,specs:"2-way MS diverter, pneumatic actuation, limit switches"},
+    {desc:"Cushion Boxes / Deadheads",qty:6,unit:"Nos",unitPrice:18000,install:2700,specs:"MS fabricated, rubber lined, reduces grain velocity at drop points"},
   ]},
   {id:4,name:"Storage Silo Structure",open:false,items:[
-    {desc:"Galvanized Steel Sidewall Sheets (3mm, Z275)",qty:1,unit:"Lot",exw:4200000,install:840000},
-    {desc:"Roof Panels & Compression Rings",qty:1,unit:"Set",exw:680000,install:136000},
-    {desc:"External Stiffeners (Vertical)",qty:1,unit:"Lot",exw:420000,install:84000},
-    {desc:"Wind Rings (Shear Reinforcement)",qty:1,unit:"Set",exw:185000,install:37000},
-    {desc:"Access Doors & Manways (Ground + Roof)",qty:4,unit:"Nos",exw:28000,install:5600},
-    {desc:"Spiral Staircase & Roof Ladder",qty:1,unit:"Set",exw:320000,install:64000},
+    {desc:"Galvanized Steel Sidewall Sheets (3mm, Z275)",qty:1,unit:"Lot",unitPrice:4200000,install:840000,specs:"Corrugated GI sheets, Z275 coating, factory pre-punched bolt holes"},
+    {desc:"Roof Panels & Compression Rings",qty:1,unit:"Set",unitPrice:680000,install:136000,specs:"Segmented conical roof, 1.5mm GI, central compression ring"},
+    {desc:"External Stiffeners (Vertical)",qty:1,unit:"Lot",unitPrice:420000,install:84000,specs:"Cold-formed stiffener columns, bolted to sidewall sheets"},
+    {desc:"Wind Rings (Shear Reinforcement)",qty:1,unit:"Set",unitPrice:185000,install:37000,specs:"Flat bar ring welded to stiffeners, shear force transfer"},
+    {desc:"Access Doors & Manways",qty:4,unit:"Nos",unitPrice:28000,install:5600,specs:"600x900mm ground manway + 500x700mm roof manway, MS galvanized"},
+    {desc:"Spiral Staircase & Roof Ladder",qty:1,unit:"Set",unitPrice:320000,install:64000,specs:"GI spiral stair with handrail, roof access ladder with cage"},
   ]},
   {id:5,name:"Discharge & Unloading Mechanics",open:false,items:[
-    {desc:"Center Draw-Off Gate (Flat Bottom)",qty:1,unit:"Nos",exw:125000,install:18750},
-    {desc:"Intermediate Sump Gates",qty:2,unit:"Nos",exw:75000,install:11250},
-    {desc:"Sweep Auger with Tractor Drive",qty:1,unit:"Set",exw:485000,install:72750},
-    {desc:"Lower Reclaim Conveyor (30m)",qty:1,unit:"Nos",exw:380000,install:57000},
+    {desc:"Center Draw-Off Gate (Flat Bottom)",qty:1,unit:"Nos",unitPrice:125000,install:18750,specs:"Rack & pinion operated, 400mm dia opening, MS galvanized"},
+    {desc:"Intermediate Sump Gates",qty:2,unit:"Nos",unitPrice:75000,install:11250,specs:"300mm dia, slide gate type, manual operation"},
+    {desc:"Sweep Auger with Tractor Drive",qty:1,unit:"Set",unitPrice:485000,install:72750,specs:"Reach = exactly R/2 (half silo diameter), 6\" auger, 4 PU tractor wheels, 3 kW centre drive + 1.5 kW tractor motor"},
+    {desc:"Lower Reclaim Conveyor (30m)",qty:1,unit:"Nos",unitPrice:380000,install:57000,specs:"Drag chain type, 350mm wide, 5.5 kW motor, MS construction"},
   ]},
   {id:6,name:"Conditioning & Quality Preservation",open:false,items:[
-    {desc:"Centrifugal Aeration Fans (7.5 kW each)",qty:4,unit:"Nos",exw:85000,install:12750},
-    {desc:"Floor Aeration Grating (GI Trench Covers)",qty:1,unit:"Lot",exw:220000,install:33000},
-    {desc:"Roof Exhaust Vents (Gravity)",qty:6,unit:"Nos",exw:12000,install:1800},
-    {desc:"Grain Monitoring System (OPI type, 8 cables)",qty:1,unit:"Set",exw:680000,install:102000},
+    {desc:"Centrifugal Aeration Fans (7.5 kW each)",qty:4,unit:"Nos",unitPrice:85000,install:12750,specs:"Backward curved impeller, 18,000 m3/hr @ 250Pa, 960 RPM, IE3 motor"},
+    {desc:"Floor Aeration Grating (GI Trench Covers)",qty:1,unit:"Lot",unitPrice:220000,install:33000,specs:"GI perforated trench covers, 3mm thk, 500mm wide channels"},
+    {desc:"Roof Exhaust Vents (Gravity)",qty:6,unit:"Nos",unitPrice:12000,install:1800,specs:"GI gravity vent, 450mm dia, bird mesh, no moving parts"},
+    {desc:"Grain Monitoring System (OPI type, 8 cables)",qty:1,unit:"Set",unitPrice:680000,install:102000,specs:"8 cables x 12 sensors @ 1.5m spacing, Temp ±0.3 deg C, MC ±0.5%, 4G/WiFi, web + mobile app"},
   ]},
   {id:7,name:"Control & Automation",open:false,items:[
-    {desc:"Motor Control Center (MCC) Panel",qty:1,unit:"Nos",exw:850000,install:127500},
-    {desc:"PLC System (Siemens S7-1200)",qty:1,unit:"Set",exw:650000,install:97500},
-    {desc:"Level Sensors (High/Low per bin)",qty:4,unit:"Nos",exw:22000,install:3300},
-    {desc:"Motion & Alignment Safety Sensors",qty:8,unit:"Nos",exw:18000,install:2700},
+    {desc:"Motor Control Center (MCC) Panel",qty:1,unit:"Nos",unitPrice:850000,install:127500,specs:"CRCA sheet, powder coated, IP54, incomer ACB, all motor starters with overloads"},
+    {desc:"PLC System (Siemens S7-1200)",qty:1,unit:"Set",unitPrice:650000,install:97500,specs:"64DI/48DO/16AI/8AO, 15\" HMI touchscreen, Profinet, Modbus TCP, SCADA-ready, UPS 30 min"},
+    {desc:"Level Sensors (High/Low per bin)",qty:4,unit:"Nos",unitPrice:22000,install:3300,specs:"Rotary paddle type, 230VAC, SPDT relay output, IP66"},
+    {desc:"Motion & Alignment Safety Sensors",qty:8,unit:"Nos",unitPrice:18000,install:2700,specs:"Belt sway + zero speed switches, IP67, suitable for dusty environment"},
   ]},
 ];
 
-const DEF_TERMS = {
+const DEF_TERMS={
   commercial:[
     "Prices valid 90 days from quotation date unless otherwise stated in writing.",
-    "Payment: 30% advance with order · 60% progressive against dispatch documents · 10% within 30 days of commissioning.",
+    "Payment: 30% advance with order, 60% progressive against dispatch documents, 10% within 30 days of commissioning.",
     "All prices in INR. Steel price escalation exceeding 8% from order date is subject to revision with supporting documentation.",
     "GST applicable at prevailing government rates at time of invoicing.",
     "Force majeure events entitle Brag Systems to reasonable delivery extension with written notice.",
     "Cancellation after order acceptance: 20% of order value as cancellation charges.",
   ],
   warranty:[
-    "Delivery: 14–20 weeks from advance payment and written drawing approval. Subject to civil work readiness.",
+    "Delivery: 14-20 weeks from advance payment and written drawing approval. Subject to civil work readiness.",
     "Warranty: 12 months from commissioning or 18 months from dispatch, whichever is earlier.",
     "Warranty covers manufacturing defects only. Damage from misuse or unauthorised modification is excluded.",
     "Warranty service: Brag Systems repairs or replaces defective parts at no charge during warranty period.",
   ],
   exclusions:[
-    "Civil & structural work — silo foundation, equipment plinths, roads, drainage, building structure.",
-    "Electrical power supply cabling up to MCC incoming terminals — from transformer/DG to panel.",
+    "Civil & structural work - silo foundation, equipment plinths, roads, drainage, building structure.",
+    "Electrical power supply cabling up to MCC incoming terminals - from transformer/DG to panel.",
     "Diesel Generator set, transformer, HT/LT power infrastructure and metering.",
     "Water supply, compressed air network, fire-fighting system.",
-    "Grain for commissioning trials — client to provide 20–50 MT of clean, dry grain.",
+    "Grain for commissioning trials - client to provide 20-50 MT of clean, dry grain.",
     "Labour accommodation, site office, sanitation facilities at site.",
     "Statutory approvals, factory license, pollution control NOC, local authority permissions.",
     "Third-party inspection or insurance unless specifically priced.",
@@ -157,27 +125,73 @@ const DEF_TERMS = {
   ],
 };
 
-const PAGES=["Index","Cover","Equipment","Pricing","Tech Sheets","Timeline","Layout","Terms","References","Thank You"];
+const DEF_COVER={
+  greeting:"Dear Sir / Madam,",
+  intro:"Thank you for your enquiry. We are pleased to submit our quotation for the grain storage infrastructure project as detailed below. Brag Systems brings 15+ years of hands-on field experience across India to deliver complete, integrated silo solutions from intake to dispatch.",
+  closingTitle:"Let's Build It Better!",
+  closingBody:"We treat your investment as our own. Our team will be present on site from day one through commissioning. We look forward to your positive response.",
+  founderNote:"Abhinav Sharma\nFounder & Director, Brag Systems\nB.E. Agricultural Engineering (G.B. Pant University)\nEx-AGCO GSI · Ex-Buhler · Ex-Schmidt-Seeger\ninfo@bragsystems.com · www.bragsystems.com",
+  headerLine:"Brag Systems — India's Grain Storage Execution Partner",
+  footerLine:"Eco Tower, Cyberwalk Tech Park, IMT Manesar, Gurugram, Haryana | info@bragsystems.com | www.bragsystems.com",
+};
+
+const DEF_CLOSING={
+  thankYouTitle:"Thank You for Your Confidence",
+  thankYouBody:"We sincerely appreciate the opportunity to quote for your grain storage project. Brag Systems is committed to delivering this project on time, on budget, and to specification. We look forward to a long and productive association.",
+  nextSteps:"1. Review this quotation with your team\n2. Share any technical queries or scope changes\n3. Arrange a site visit to a reference installation\n4. Place order with 30% advance to commence engineering",
+  signOff:"For and on behalf of Brag Systems",
+  footerLine:"www.bragsystems.com  |  info@bragsystems.com  |  +91 XXXXX XXXXX  |  Eco Tower, IMT Manesar, Gurugram",
+};
+
+const PAGES=["Index","Cover","Equipment","Pricing","Tech Sheets","Timeline","Layout","Terms","References","Closing"];
 
 function calcT(secs,pf,fr,tax,inc){
-  const exw=secs.reduce((a,s)=>a+s.items.reduce((b,i)=>b+(i.qty||0)*(i.exw||0),0),0);
+  const exw=secs.reduce((a,s)=>a+s.items.reduce((b,i)=>b+(i.qty||0)*(i.unitPrice||0),0),0);
   const inst=secs.reduce((a,s)=>a+s.items.reduce((b,i)=>b+(i.install||0),0),0);
-  const pfA=exw*pf/100, frA=inc==="exworks"?0:exw*fr/100;
-  const sub=exw+pfA+frA, taxA=sub*tax/100;
-  return {exw,inst,pf:pfA,fr:frA,sub,tax:taxA,total:sub+taxA+inst};
+  const pfA=exw*pf/100,frA=inc==="exworks"?0:exw*fr/100;
+  const sub=exw+pfA+frA,taxA=sub*tax/100;
+  return{exw,inst,pf:pfA,fr:frA,sub,tax:taxA,total:sub+taxA+inst};
+}
+
+// ── STABLE INPUT — fixes cursor jumping ──────────────────
+// Use uncontrolled inputs with refs to avoid re-render on every keystroke
+function StableInput({value,onBlur,placeholder="",type="text",style={}}){
+  const ref=useRef(null);
+  useEffect(()=>{if(ref.current&&document.activeElement!==ref.current)ref.current.value=value||"";},[value]);
+  return <input ref={ref} type={type} defaultValue={value||""} onBlur={e=>onBlur(e.target.value)} placeholder={placeholder} style={style}/>;
+}
+
+function StableTextarea({value,onBlur,placeholder="",rows=3,style={}}){
+  const ref=useRef(null);
+  useEffect(()=>{if(ref.current&&document.activeElement!==ref.current)ref.current.value=value||"";},[value]);
+  return <textarea ref={ref} defaultValue={value||""} onBlur={e=>onBlur(e.target.value)} placeholder={placeholder} rows={rows} style={style}/>;
 }
 
 // ── SHARED UI ─────────────────────────────────────────────
-const inpSt={fontSize:12,padding:"6px 9px",borderRadius:6,border:"1px solid #ddd",background:"#fff",color:"#1A1A1A",width:"100%",outline:"none"};
-const lblSt={fontSize:10,color:"#777",textTransform:"uppercase",letterSpacing:"0.05em",display:"block",marginBottom:3,fontWeight:600};
+const IS={fontSize:12,padding:"6px 9px",borderRadius:6,border:"1px solid #ddd",background:"#fff",color:"#1A1A1A",width:"100%",outline:"none"};
+const LS={fontSize:10,color:"#777",textTransform:"uppercase",letterSpacing:"0.05em",display:"block",marginBottom:3,fontWeight:600};
 
+// Controlled field for modals (short interactions — no cursor issue)
 function F({label,val,fn,type="text",ph="",rows=0}){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:3}}>
-      <label style={lblSt}>{label}</label>
+      {label&&<label style={LS}>{label}</label>}
       {rows>0
-        ?<textarea value={val} onChange={e=>fn(e.target.value)} placeholder={ph} rows={rows} style={{...inpSt,resize:"vertical"}}/>
-        :<input type={type} value={val||""} onChange={e=>fn(e.target.value)} placeholder={ph} style={inpSt}/>
+        ?<textarea value={val||""} onChange={e=>fn(e.target.value)} placeholder={ph} rows={rows} style={{...IS,resize:"vertical"}}/>
+        :<input type={type} value={val||""} onChange={e=>fn(e.target.value)} placeholder={ph} style={IS}/>
+      }
+    </div>
+  );
+}
+
+// Stable field for long pages (cover/closing) — no cursor jump
+function SF({label,val,fn,type="text",ph="",rows=0}){
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:3}}>
+      {label&&<label style={LS}>{label}</label>}
+      {rows>0
+        ?<StableTextarea value={val} onBlur={fn} placeholder={ph} rows={rows} style={{...IS,resize:"vertical"}}/>
+        :<StableInput value={val} onBlur={fn} placeholder={ph} type={type} style={IS}/>
       }
     </div>
   );
@@ -188,15 +202,15 @@ function Btn({ch,onClick,outline=false,small=false,danger=false,disabled=false})
   const cl=danger?"#fff":outline?O:"#fff";
   return(
     <button onClick={onClick} disabled={disabled}
-      style={{padding:small?"4px 10px":"7px 16px",border:outline?`1px solid ${danger?"#E24B4A":O}`:"none",borderRadius:7,background:disabled?"#ccc":bg,color:disabled?"#888":cl,fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontSize:small?11:12,display:"inline-flex",alignItems:"center",gap:5}}>
+      style={{padding:small?"3px 9px":"7px 16px",border:outline?`1px solid ${danger?"#E24B4A":O}`:"none",borderRadius:7,background:disabled?"#ccc":bg,color:disabled?"#888":cl,fontWeight:600,cursor:disabled?"not-allowed":"pointer",fontSize:small?11:12,display:"inline-flex",alignItems:"center",gap:5}}>
       {ch}
     </button>
   );
 }
 
-function PRow({label,val,grand,total}){
+function PRow({label,val,grand,total,muted}){
   return(
-    <div style={{display:"flex",justifyContent:"space-between",padding:grand?"7px 0":"3px 0",borderBottom:grand||total?"none":"1px solid #f0f0f0",borderTop:total?"1px solid #ddd":"none",marginTop:total?4:0,fontSize:grand?13.5:12,fontWeight:grand||total?700:400,color:grand?O:"inherit"}}>
+    <div style={{display:"flex",justifyContent:"space-between",padding:grand?"7px 0":"3px 0",borderBottom:grand||total?"none":"1px solid #f0f0f0",borderTop:total?"1px solid #ddd":"none",marginTop:total?4:0,fontSize:grand?13.5:12,fontWeight:grand||total?700:400,color:grand?O:muted?"#888":"inherit"}}>
       <span>{label}</span><span style={{fontWeight:grand?700:500}}>{val}</span>
     </div>
   );
@@ -204,17 +218,13 @@ function PRow({label,val,grand,total}){
 
 function Toast({msg}){
   if(!msg)return null;
-  return(
-    <div style={{position:"fixed",bottom:80,right:16,background:DK,color:"#fff",padding:"10px 16px",borderRadius:8,fontSize:12,zIndex:300,display:"flex",alignItems:"center",gap:8,boxShadow:"0 4px 20px rgba(0,0,0,.25)"}}>
-      <span style={{color:O,fontSize:16}}>✓</span>{msg}
-    </div>
-  );
+  return <div style={{position:"fixed",bottom:80,right:16,background:DK,color:"#fff",padding:"10px 16px",borderRadius:8,fontSize:12,zIndex:300,display:"flex",alignItems:"center",gap:8,boxShadow:"0 4px 20px rgba(0,0,0,.25)"}}><span style={{color:O,fontSize:16}}>✓</span>{msg}</div>;
 }
 
-function Modal({title,onClose,children}){
+function Modal({title,onClose,children,wide=false}){
   return(
     <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="modal">
+      <div className="modal" style={{maxWidth:wide?680:560}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,paddingBottom:12,borderBottom:"1px solid #eee"}}>
           <span style={{fontSize:14,fontWeight:700}}>{title}</span>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa",lineHeight:1}}>×</button>
@@ -225,209 +235,394 @@ function Modal({title,onClose,children}){
   );
 }
 
-// ── PDF EXPORT ────────────────────────────────────────────
-function genPDF(client,quote,sections,pf,freight,tax,incoterm,terms){
+// ── PDF GENERATOR ─────────────────────────────────────────
+function genPDF(client,quote,sections,pf,freight,tax,incoterm,terms,cover,closing){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
-  const M=15;
+  const M=14,W=182;
   let y=0;
-  const addPage=()=>{doc.addPage();y=20;};
+  const addPage=()=>{doc.addPage();y=18;};
   const chk=n=>{if(y+n>278)addPage();};
-  const hr=(hex)=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return[r,g,b];};
-  const [or,og,ob]=hr(O);
+  const rgb=hex=>[parseInt(hex.slice(1,3),16),parseInt(hex.slice(3,5),16),parseInt(hex.slice(5,7),16)];
+  const [or,og,ob]=rgb(O);
   const t=calcT(sections,pf,freight,tax,incoterm);
 
-  // COVER
-  doc.setFillColor(26,26,26);doc.rect(0,0,210,297,"F");
-  doc.setFillColor(or,og,ob);doc.circle(185,40,55,"F");
-  doc.setFillColor(30,30,30);doc.circle(185,40,44,"F");
-  doc.setTextColor(or,og,ob);doc.setFontSize(9);doc.setFont("helvetica","bold");
-  doc.text("QUOTATION DOCUMENT",M,44,{charSpace:2});
-  doc.setTextColor(255,255,255);doc.setFontSize(28);
-  doc.text("Grain Storage",M,60);doc.text("Infrastructure",M,72);doc.text("Quotation",M,84);
-  doc.setFontSize(11);doc.setFont("helvetica","italic");doc.setTextColor(158,152,144);
-  doc.text("Let's Build It Better!",M,96);
-  doc.setDrawColor(or,og,ob);doc.setLineWidth(0.8);doc.line(M,103,M+70,103);
-  let mx=M;
-  [[`Quote`,quote.num],[`Date`,quote.date],[`Valid`,quote.validity+"d"],[`Incoterm`,incoterm.toUpperCase()]].forEach(([k,v])=>{
-    doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(100,100,100);doc.text(k,mx,113);
-    doc.setFontSize(10);doc.setFont("helvetica","bold");doc.setTextColor(or,og,ob);doc.text(v,mx,119);mx+=48;
-  });
-  if(client.company){
-    doc.setFillColor(40,40,40);doc.roundedRect(M,128,180,44,3,3,"F");
-    doc.setTextColor(or,og,ob);doc.setFontSize(8);doc.setFont("helvetica","bold");doc.text("PREPARED FOR",M+5,137,{charSpace:1});
-    doc.setTextColor(255,255,255);doc.setFontSize(14);doc.setFont("helvetica","bold");doc.text(client.company,M+5,147);
-    doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(158,152,144);
-    doc.text(`${client.name||""}${client.city?` · ${client.city}`:""}`,M+5,155);
-    if(client.project)doc.text(client.project,M+5,162);
-  }
-  doc.setTextColor(130,125,118);doc.setFontSize(9);doc.setFont("helvetica","italic");
-  doc.text(doc.splitTextToSize('"At Brag Systems, we take complete ownership of your grain storage project. Let\'s build it better."',180),M,195);
-  doc.setFont("helvetica","bold");doc.setTextColor(or,og,ob);
-  doc.text("— Abhinav Sharma, Founder & Director",M,207);
-  doc.setFont("helvetica","normal");doc.setTextColor(100,100,100);doc.setFontSize(8);
-  doc.text("B.E. Agricultural Engineering (G.B. Pant University) · Ex-AGCO GSI · Ex-Bühler · Ex-Schmidt-Seeger",M,213);
-  let sx=M;
-  [["15+","Years"],["50+","Projects"],["7","States"],["100%","Turnkey"]].forEach(([v,l])=>{
-    doc.setFillColor(40,40,40);doc.roundedRect(sx,228,42,22,2,2,"F");
-    doc.setTextColor(or,og,ob);doc.setFontSize(14);doc.setFont("helvetica","bold");doc.text(v,sx+21,239,{align:"center"});
-    doc.setTextColor(110,105,100);doc.setFontSize(7);doc.setFont("helvetica","normal");doc.text(l,sx+21,244,{align:"center"});
-    sx+=47;
-  });
-  doc.setTextColor(70,70,70);doc.setFontSize(8);
-  doc.text("www.bragsystems.com  ·  info@bragsystems.com  ·  Eco Tower, IMT Manesar, Gurugram",105,285,{align:"center"});
+  // ── COVER PAGE (printer-friendly: white bg) ────────────
+  y=18;
+  // Header bar - light
+  doc.setFillColor(or,og,ob);doc.rect(0,0,210,12,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","bold");
+  doc.text(cover.headerLine||"Brag Systems",105,8,{align:"center",charSpace:0.5});
 
-  // EQUIPMENT PAGES
+  // Company logo area
+  doc.setFillColor(249,249,247);doc.rect(0,12,210,30,"F");
+  doc.setTextColor(or,og,ob);doc.setFontSize(22);doc.setFont("helvetica","bold");
+  doc.text("BRAG SYSTEMS",M,28);
+  doc.setTextColor(80,80,80);doc.setFontSize(10);doc.setFont("helvetica","normal");
+  doc.text("India's Grain Storage Execution Partner",M,35);
+  doc.setFillColor(or,og,ob);doc.rect(M,39,W,0.8,"F");
+
+  y=50;
+  // Quote meta - light boxes
+  doc.setFillColor(249,249,247);doc.roundedRect(M,y,W,22,2,2,"F");
+  doc.setDrawColor(220,220,215);doc.setLineWidth(0.3);doc.roundedRect(M,y,W,22,2,2,"D");
+  const meta=[["QUOTATION NO.",quote.num],["DATE",quote.date],["VALID FOR",quote.validity+" days"],["INCOTERM",incoterm.toUpperCase()]];
+  meta.forEach(([k,v],i)=>{
+    const x=M+4+i*46;
+    doc.setTextColor(150,145,140);doc.setFontSize(7);doc.setFont("helvetica","bold");doc.text(k,x,y+7,{charSpace:0.3});
+    doc.setTextColor(DK.replace("#",""));doc.setFontSize(10);doc.setFont("helvetica","bold");
+    doc.setTextColor(26,26,26);doc.text(v,x,y+15);
+  });
+  y+=28;
+
+  // Prepared for box
+  if(client.company){
+    doc.setFillColor(253,248,242);doc.roundedRect(M,y,W,client.project?32:26,2,2,"F");
+    doc.setFillColor(or,og,ob);doc.rect(M,y,3,client.project?32:26,"F");
+    doc.setTextColor(or,og,ob);doc.setFontSize(7);doc.setFont("helvetica","bold");doc.text("PREPARED FOR",M+6,y+6,{charSpace:0.5});
+    doc.setTextColor(26,26,26);doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text(client.company,M+6,y+14);
+    doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(80,80,80);
+    doc.text(`${client.name||""}${client.city?`  |  ${client.city}`:""}`,M+6,y+21);
+    if(client.project){doc.setTextColor(or,og,ob);doc.setFontSize(9);doc.text(client.project,M+6,y+28);}
+    y+=client.project?38:32;
+  }
+
+  // Greeting & intro
+  doc.setTextColor(80,80,80);doc.setFontSize(10);doc.setFont("helvetica","normal");
+  doc.text(cover.greeting||"Dear Sir / Madam,",M,y);y+=7;
+  const introLines=doc.splitTextToSize(cover.intro||"",W);
+  doc.text(introLines,M,y);y+=introLines.length*5+6;
+
+  // Stats row - light
+  const stats=[["15+","Years Exp."],["50+","Projects"],["7","States"],["100%","Turnkey"]];
+  doc.setFillColor(249,249,247);doc.roundedRect(M,y,W,20,2,2,"F");
+  stats.forEach(([v,l],i)=>{
+    const x=M+8+i*46;
+    doc.setTextColor(or,og,ob);doc.setFontSize(14);doc.setFont("helvetica","bold");doc.text(v,x,y+10);
+    doc.setTextColor(100,100,100);doc.setFontSize(7);doc.setFont("helvetica","normal");doc.text(l,x,y+16);
+  });
+  y+=26;
+
+  // Scope summary
+  const scopeLines=doc.splitTextToSize(cover.closingBody||"",W);
+  doc.setTextColor(60,60,60);doc.setFontSize(9.5);doc.setFont("helvetica","normal");
+  doc.text(scopeLines,M,y);y+=scopeLines.length*5+6;
+
+  // Founder note
+  doc.setFillColor(249,249,247);doc.roundedRect(M,y,W,28,2,2,"F");
+  doc.setFillColor(or,og,ob);doc.rect(M,y,3,28,"F");
+  const founderLines=(cover.founderNote||"Abhinav Sharma\nFounder & Director, Brag Systems").split("\n");
+  founderLines.forEach((l,i)=>{
+    if(i===0){doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(26,26,26);}
+    else{doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(80,80,80);}
+    doc.text(l,M+6,y+6+i*5);
+  });
+  y+=34;
+
+  // Footer
+  doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7.5);doc.setFont("helvetica","normal");
+  doc.text(cover.footerLine||"www.bragsystems.com",105,293,{align:"center"});
+
+  // ── EQUIPMENT PAGES ────────────────────────────────────
   sections.forEach(sec=>{
     addPage();
-    doc.setFillColor(or,og,ob);doc.roundedRect(M,y,180,10,2,2,"F");
+    // Header
+    doc.setFillColor(or,og,ob);doc.roundedRect(M,y,W,10,2,2,"F");
     doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");
-    doc.text(`${sec.id}. ${sec.name}`,M+4,y+7);y+=15;
-    const rows=sec.items.map(i=>[i.desc,String(i.qty),i.unit,fmt((i.qty||0)*(i.exw||0)),fmt(i.install||0)]);
-    const sExw=sec.items.reduce((a,i)=>a+(i.qty||0)*(i.exw||0),0);
+    doc.text(`${sec.id}. ${sec.name}`,M+4,y+7);y+=14;
+
+    // Column headers
+    const cols=[
+      {header:"#",dataKey:"n",width:6},
+      {header:"Description",dataKey:"d",width:72},
+      {header:"Qty",dataKey:"q",width:10},
+      {header:"Unit",dataKey:"u",width:14},
+      {header:"Unit Price (Rs.)",dataKey:"up",width:30},
+      {header:"EXW Total (Rs.)",dataKey:"ew",width:30},
+      {header:"Install (Rs.)",dataKey:"ins",width:25},
+    ];
+    const totalW=cols.reduce((a,c)=>a+c.width,0);
+
+    // Draw header row
+    doc.setFillColor(or,og,ob);doc.rect(M,y,W,7,"F");
+    let cx=M;
+    cols.forEach(c=>{
+      doc.setTextColor(255,255,255);doc.setFontSize(8);doc.setFont("helvetica","bold");
+      doc.text(c.header,cx+1,y+5);cx+=c.width;
+    });
+    y+=7;
+
+    sec.items.forEach((item,idx)=>{
+      const exwTotal=(item.qty||0)*(item.unitPrice||0);
+      const rowH=item.specs?14:9;
+      chk(rowH+2);
+      if(idx%2===0){doc.setFillColor(252,252,250);}else{doc.setFillColor(255,255,255);}
+      doc.rect(M,y,W,rowH,"F");
+
+      cx=M;
+      const cells=[
+        {v:String(idx+1),align:"center"},
+        {v:item.desc,align:"left"},
+        {v:String(item.qty||0),align:"center"},
+        {v:item.unit||"",align:"center"},
+        {v:fmtPDF(item.unitPrice||0),align:"right"},
+        {v:fmtPDF(exwTotal),align:"right"},
+        {v:fmtPDF(item.install||0),align:"right"},
+      ];
+      cols.forEach((c,ci)=>{
+        doc.setTextColor(30,30,30);doc.setFontSize(8.5);doc.setFont("helvetica","normal");
+        const cellX=cells[ci].align==="right"?cx+c.width-1:cx+1;
+        const opts=cells[ci].align==="right"?{align:"right"}:{};
+        // truncate description if too long
+        let txt=cells[ci].v;
+        if(ci===1&&doc.getTextWidth(txt)>c.width-2)txt=doc.splitTextToSize(txt,c.width-2)[0]+"...";
+        doc.text(txt,cellX,y+5.5,opts);
+        cx+=c.width;
+      });
+
+      if(item.specs){
+        doc.setTextColor(100,100,100);doc.setFontSize(7.5);doc.setFont("helvetica","italic");
+        const specText=doc.splitTextToSize("  Spec: "+item.specs,W-4);
+        doc.text(specText[0],M+1,y+11);
+      }
+
+      // bottom border
+      doc.setDrawColor(235,235,235);doc.setLineWidth(0.2);doc.line(M,y+rowH,M+W,y+rowH);
+      y+=rowH;
+    });
+
+    // Section totals
+    const sExw=sec.items.reduce((a,i)=>a+(i.qty||0)*(i.unitPrice||0),0);
     const sInst=sec.items.reduce((a,i)=>a+(i.install||0),0);
-    doc.autoTable({head:[["Description","Qty","Unit","Ex-Works (₹)","Install (₹)"]],body:rows,startY:y,margin:{left:M,right:M},
-      headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:9,fontStyle:"bold"},
-      bodyStyles:{fontSize:9},alternateRowStyles:{fillColor:[250,250,248]},
-      columnStyles:{0:{cellWidth:83},1:{cellWidth:12,halign:"center"},2:{cellWidth:16,halign:"center"},3:{cellWidth:37,halign:"right"},4:{cellWidth:32,halign:"right"}}});
-    y=doc.lastAutoTable.finalY+5;
-    doc.setFillColor(253,248,242);doc.setDrawColor(or,og,ob);doc.setLineWidth(0.3);
-    doc.roundedRect(M,y,180,12,2,2,"FD");
+    y+=3;
+    doc.setFillColor(253,248,242);doc.setDrawColor(or,og,ob);doc.setLineWidth(0.4);
+    doc.roundedRect(M,y,W,18,2,2,"FD");
     doc.setTextColor(or,og,ob);doc.setFontSize(9);doc.setFont("helvetica","bold");
-    doc.text("Section total (EXW + Install):",M+4,y+5);
-    doc.text(fmt(sExw+sInst),M+176,y+5,{align:"right"});
-    doc.setFont("helvetica","normal");doc.setTextColor(100,100,100);
-    doc.text(`EXW: ${fmt(sExw)}  |  Install: ${fmt(sInst)}`,M+4,y+10);
+    doc.text("Section Supply Total (EXW):",M+4,y+6);
+    doc.text(fmtPDF(sExw),M+W-1,y+6,{align:"right"});
+    doc.setTextColor(80,80,80);doc.setFontSize(8.5);doc.setFont("helvetica","normal");
+    doc.text(`Installation / Erection Service:`,M+4,y+13);
+    doc.text(fmtPDF(sInst),M+W-1,y+13,{align:"right"});
+    y+=22;
+
+    // Page footer
+    doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont("helvetica","normal");
+    doc.text(`Brag Systems  |  ${quote.num}  |  ${sec.name}`,M,293);
+    doc.text(`Page ${doc.getNumberOfPages()}`,210-M,293,{align:"right"});
   });
 
-  // PRICING PAGE
+  // ── SUPPLY vs SERVICE SUMMARY PAGE ──────────────────────
   addPage();
-  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,180,10,2,2,"F");
+  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,W,10,2,2,"F");
   doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");
-  doc.text("Pricing Summary",M+4,y+7);y+=15;
+  doc.text("Commercial Summary — Supply & Service",M+4,y+7);y+=16;
+
+  // Supply vs Service split table
+  const splitRows=sections.map(sec=>{
+    const supEXW=sec.items.reduce((a,i)=>a+(i.qty||0)*(i.unitPrice||0),0);
+    const supInst=sec.items.reduce((a,i)=>a+(i.install||0),0);
+    return[sec.name,fmtPDF(supEXW),fmtPDF(supInst),fmtPDF(supEXW+supInst)];
+  });
+  doc.autoTable({
+    head:[["Section","Supply — Equipment EXW (Rs.)","Service — Installation (Rs.)","Section Total (Rs.)"]],
+    body:splitRows,
+    startY:y,margin:{left:M,right:M},
+    headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:8.5,fontStyle:"bold"},
+    bodyStyles:{fontSize:9},
+    alternateRowStyles:{fillColor:[250,250,248]},
+    columnStyles:{0:{cellWidth:72},1:{cellWidth:38,halign:"right"},2:{cellWidth:36,halign:"right"},3:{cellWidth:36,halign:"right"}},
+  });
+  y=doc.lastAutoTable.finalY+6;
+
+  // Pricing breakdown
   const pRows=[
-    ["Total Equipment (Ex-Works)","",fmt(t.exw)],
-    [`Packing & Forwarding (${pf}%)`,"",fmt(t.pf)],
-    incoterm!=="exworks"?[`Freight & Logistics (${freight}%)`,"",fmt(t.fr)]:null,
-    ["Sub-total (before tax)","",fmt(t.sub)],
-    [`GST @ ${tax}%`,"",fmt(t.tax)],
-    ["Installation (site actuals — indicative)","",fmt(t.inst)],
+    ["A. Supply — Total Equipment (Ex-Works)","",fmtPDF(t.exw)],
+    [`   Packing & Forwarding (${pf}%)`,"",fmtPDF(t.pf)],
+    incoterm!=="exworks"?[`   Freight & Logistics (${freight}%)`,"",fmtPDF(t.fr)]:null,
+    ["B. Supply Sub-total (before tax)","",fmtPDF(t.sub)],
+    [`   GST @ ${tax}% on Supply`,"",fmtPDF(t.tax)],
+    ["C. Service — Installation / Erection*","",fmtPDF(t.inst)],
   ].filter(Boolean);
-  doc.autoTable({head:[["Description","","Amount (₹)"]],body:pRows,startY:y,margin:{left:M,right:M},
-    headStyles:{fillColor:[245,245,242],textColor:[80,80,80],fontSize:9},bodyStyles:{fontSize:10},
-    columnStyles:{0:{cellWidth:118},1:{cellWidth:22},2:{cellWidth:40,halign:"right",fontStyle:"bold"}}});
-  y=doc.lastAutoTable.finalY+4;
-  doc.setFillColor(26,26,26);doc.roundedRect(M,y,180,18,3,3,"F");
-  doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","normal");doc.text("TOTAL PROJECT COST",M+5,y+8);
-  doc.setTextColor(or,og,ob);doc.setFontSize(15);doc.setFont("helvetica","bold");doc.text(fmt(t.total),M+176,y+12,{align:"right"});
-  y+=24;
-  doc.setTextColor(DK);doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("Payment Milestone Schedule",M,y);y+=5;
-  doc.autoTable({body:[
-    ["30% — Order advance on signing",fmt(t.total*0.30)],
-    ["30% — On dispatch of silo structure",fmt(t.total*0.30)],
-    ["30% — On dispatch of mechanical equipment",fmt(t.total*0.30)],
-    ["10% — On commissioning & handover",fmt(t.total*0.10)],
-  ],startY:y,margin:{left:M,right:M},bodyStyles:{fontSize:10},
-  columnStyles:{0:{cellWidth:140},1:{cellWidth:40,halign:"right",fontStyle:"bold",textColor:[or,og,ob]}}});
 
-  // TIMELINE PAGE
-  addPage();
-  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,180,10,2,2,"F");
-  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("Project Timeline",M+4,y+7);y+=15;
-  doc.autoTable({head:[["Period","Milestone","Scope"]],
+  doc.autoTable({
+    head:[["Description","","Amount (Rs.)"]],
+    body:pRows,
+    startY:y,margin:{left:M,right:M},
+    headStyles:{fillColor:[245,245,242],textColor:[80,80,80],fontSize:8.5},
+    bodyStyles:{fontSize:9.5},
+    columnStyles:{0:{cellWidth:120},1:{cellWidth:20},2:{cellWidth:42,halign:"right",fontStyle:"bold"}},
+  });
+  y=doc.lastAutoTable.finalY+5;
+
+  // Grand total
+  doc.setFillColor(26,26,26);doc.roundedRect(M,y,W,20,3,3,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","normal");
+  doc.text("TOTAL PROJECT COST (Supply + Service + Tax)",M+5,y+9);
+  doc.setTextColor(or,og,ob);doc.setFontSize(15);doc.setFont("helvetica","bold");
+  doc.text(fmtPDF(t.total),M+W-1,y+14,{align:"right"});
+  y+=26;
+
+  // Note
+  doc.setTextColor(100,100,100);doc.setFontSize(8);doc.setFont("helvetica","italic");
+  doc.text("* Installation / Erection service billed separately on actuals against work completion certificates. Above figure is indicative.",M,y);y+=5;
+  doc.text("  GST on installation service billed separately at applicable rates.",M,y);y+=10;
+
+  // Payment milestones
+  doc.setTextColor(26,26,26);doc.setFontSize(10);doc.setFont("helvetica","bold");
+  doc.text("Payment Milestone Schedule",M,y);y+=5;
+  doc.autoTable({
     body:[
-      ["Week 1–2","Order Finalisation & Kickoff","Contract, advance payment, site survey, drawing approval kickoff"],
-      ["Week 3–4","Engineering & Drawing Approval","GA, foundation, SLD submitted for client approval within 10 working days"],
-      ["Week 5–8","Civil & Foundation Work","Client scope — silo foundation, plinths, pit — supervised by Brag Systems"],
-      ["Week 7–12","Equipment Mfg & FAT","Fabrication + Factory Acceptance Testing before dispatch"],
-      ["Week 12–14","Dispatch & Site Delivery","Progressive dispatch with site receipt inspection checklist"],
-      ["Week 14–20","Silo Erection & Mechanical Install","Structure, equipment, ductwork, catwalk, staircase"],
-      ["Week 20–22","Electrical & Automation Install","MCC, PLC programming, sensors, earthing, lightning protection"],
-      ["Week 22–24","Commissioning & Trial Run","No-load trial, grain trial, PLC tuning, aeration & monitoring"],
-      ["Week 24","Handover & Training","O&M manual, 2-day training, as-built drawings, 12-month DLP begins"],
-    ],startY:y,margin:{left:M,right:M},
-    headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:9},bodyStyles:{fontSize:9},
-    columnStyles:{0:{cellWidth:22,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:56,fontStyle:"bold"},2:{cellWidth:102}}});
+      ["Milestone 1","30% — Order advance on signing of contract",fmtPDF(t.total*0.30)],
+      ["Milestone 2","30% — Against dispatch of silo structure",fmtPDF(t.total*0.30)],
+      ["Milestone 3","30% — Against dispatch of mechanical equipment",fmtPDF(t.total*0.30)],
+      ["Milestone 4","10% — On commissioning & handover",fmtPDF(t.total*0.10)],
+    ],
+    startY:y,margin:{left:M,right:M},
+    bodyStyles:{fontSize:9.5},
+    columnStyles:{0:{cellWidth:22,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:120},2:{cellWidth:40,halign:"right",fontStyle:"bold",textColor:[or,og,ob]}},
+  });
 
-  // TERMS PAGE
+  doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont("helvetica","normal");
+  doc.text(closing.footerLine||"www.bragsystems.com",105,293,{align:"center"});
+
+  // ── TERMS PAGE ─────────────────────────────────────────
   addPage();
-  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,180,10,2,2,"F");
-  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("Terms, Conditions & Exclusions",M+4,y+7);y+=15;
+  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,W,10,2,2,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");
+  doc.text("Terms, Conditions & Exclusions",M+4,y+7);y+=15;
   const tSecs=[
     {title:"COMMERCIAL TERMS",color:[or,og,ob],items:terms.commercial,prefix:""},
     {title:"DELIVERY & WARRANTY",color:[or,og,ob],items:terms.warranty,prefix:""},
-    {title:"EXCLUSIONS — NOT IN SCOPE",color:[226,75,74],items:terms.exclusions,prefix:"E"},
+    {title:"EXCLUSIONS - NOT IN SCOPE",color:[226,75,74],items:terms.exclusions,prefix:"E"},
     {title:"LEGAL & JURISDICTION",color:[40,40,40],items:terms.legal,prefix:"L"},
   ];
   let tn=1,en=1,ln=1;
   tSecs.forEach(ts=>{
     chk(20);
     doc.setFillColor(...ts.color);doc.rect(M,y,3,6,"F");
-    doc.setFillColor(249,249,247);doc.rect(M+3,y,177,6,"F");
-    doc.setTextColor(...ts.color);doc.setFontSize(9);doc.setFont("helvetica","bold");
-    doc.text(ts.title,M+6,y+4.5,{charSpace:0.3});y+=9;
+    doc.setFillColor(249,249,247);doc.rect(M+3,y,W-3,6,"F");
+    doc.setTextColor(...ts.color);doc.setFontSize(8.5);doc.setFont("helvetica","bold");
+    doc.text(ts.title,M+5,y+4.5,{charSpace:0.3});y+=9;
     ts.items.forEach(item=>{
-      chk(14);
+      chk(12);
       const num=ts.prefix==="E"?`E${en++}`:ts.prefix==="L"?`L${ln++}`:`${tn++}`;
-      doc.setTextColor(or,og,ob);doc.setFontSize(9);doc.setFont("helvetica","bold");
-      doc.text(String(num)+".",M,y+3);
-      doc.setTextColor(50,50,50);doc.setFont("helvetica","normal");
-      const lines=doc.splitTextToSize(item,164);
+      doc.setTextColor(or,og,ob);doc.setFontSize(8.5);doc.setFont("helvetica","bold");
+      doc.text(num+".",M,y+3);
+      doc.setTextColor(40,40,40);doc.setFont("helvetica","normal");
+      const lines=doc.splitTextToSize(item,W-8);
       doc.text(lines,M+7,y+3);
-      y+=lines.length*5+3;
-    });
-    y+=5;
+      y+=lines.length*5+2;
+    });y+=5;
+  });
+  doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont("helvetica","normal");
+  doc.text(closing.footerLine||"www.bragsystems.com",105,293,{align:"center"});
+
+  // ── REFERENCES PAGE ─────────────────────────────────────
+  addPage();
+  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,W,10,2,2,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");
+  doc.text("Reference List",M+4,y+7);y+=14;
+  doc.autoTable({
+    head:[["State","Client","Project Scope","Year"]],
+    body:[
+      ["Punjab","Lakshmi Rice Mills Pvt. Ltd.","2x5000 MT paddy silos, cleaning tower, aeration — full turnkey","2022"],
+      ["Haryana","Haryana Warehousing Corp.","1x10000 MT wheat silo + cleaning + PLC automation","2021"],
+      ["West Bengal","Bengal Flour Mills Ltd.","3x3000 MT wheat silos with aeration, monitoring, dispatch","2023"],
+      ["Chhattisgarh","CG Distillery Pvt. Ltd.","Maize intake + 2x5000 MT storage silos","2022"],
+      ["Orissa","Odisha Civil Supplies Corp.","5000 MT rice flat-bottom silo complex + MCC","2020"],
+      ["Rajasthan","Rajasthan Oil & Grain Ind.","2x3000 MT mustard hopper silos with aeration","2023"],
+      ["Punjab (Beas)","Beas Agro Processing Unit","Intake + 3 silos + sweep augers + full automation — turnkey","2024"],
+    ],
+    startY:y,margin:{left:M,right:M},
+    headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:9,fontStyle:"bold"},
+    bodyStyles:{fontSize:9},
+    alternateRowStyles:{fillColor:[250,250,248]},
+    columnStyles:{0:{cellWidth:25,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:50},2:{cellWidth:88},3:{cellWidth:19,halign:"center"}},
+  });
+  doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont("helvetica","normal");
+  doc.text(closing.footerLine||"www.bragsystems.com",105,293,{align:"center"});
+
+  // ── CLOSING / THANK YOU PAGE (printer-friendly) ─────────
+  doc.addPage();
+  // Light professional design
+  doc.setFillColor(or,og,ob);doc.rect(0,0,210,12,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","bold");
+  doc.text("Brag Systems — Quote "+quote.num,105,8,{align:"center"});
+
+  y=22;
+  doc.setFillColor(249,249,247);doc.roundedRect(M,y,W,30,3,3,"F");
+  doc.setFillColor(or,og,ob);doc.rect(M,y,4,30,"F");
+  doc.setTextColor(26,26,26);doc.setFontSize(16);doc.setFont("helvetica","bold");
+  doc.text(closing.thankYouTitle||"Thank You",M+8,y+12);
+  doc.setTextColor(or,og,ob);doc.setFontSize(11);doc.setFont("helvetica","italic");
+  doc.text('"Let\'s Build It Better!"',M+8,y+22);
+  y+=36;
+
+  const tyLines=doc.splitTextToSize(closing.thankYouBody||"",W);
+  doc.setTextColor(60,60,60);doc.setFontSize(9.5);doc.setFont("helvetica","normal");
+  doc.text(tyLines,M,y);y+=tyLines.length*5+8;
+
+  // Next steps
+  doc.setTextColor(26,26,26);doc.setFontSize(10);doc.setFont("helvetica","bold");
+  doc.text("Suggested next steps:",M,y);y+=6;
+  const nsLines=(closing.nextSteps||"").split("\n").filter(Boolean);
+  nsLines.forEach(line=>{
+    chk(8);
+    doc.setFillColor(or,og,ob);doc.circle(M+2,y+2,1.2,"F");
+    doc.setTextColor(50,50,50);doc.setFontSize(9.5);doc.setFont("helvetica","normal");
+    const ls=doc.splitTextToSize(line.replace(/^\d+\.\s*/,""),W-8);
+    doc.text(ls,M+6,y+3);y+=ls.length*5+2;
+  });
+  y+=6;
+
+  // Project cost summary box
+  doc.setFillColor(26,26,26);doc.roundedRect(M,y,W,24,3,3,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","normal");
+  doc.text("Supply (EXW + P&F):",M+5,y+8);
+  doc.text("Installation / Service:",M+5,y+16);
+  doc.setTextColor(or,og,ob);doc.setFontSize(10);doc.setFont("helvetica","bold");
+  doc.text(fmtPDF(t.sub),M+W-1,y+8,{align:"right"});
+  doc.text(fmtPDF(t.inst),M+W-1,y+16,{align:"right"});
+  doc.setFillColor(or,og,ob);doc.rect(M,y+18,W,6,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","bold");
+  doc.text("TOTAL PROJECT COST (incl. GST + Service):",M+5,y+23);
+  doc.text(fmtPDF(t.total),M+W-1,y+23,{align:"right"});
+  y+=30;
+
+  // Signature
+  y+=10;
+  doc.setDrawColor(180,175,170);doc.setLineWidth(0.3);doc.line(M,y,M+80,y);
+  doc.line(M+96,y,M+176,y);
+  y+=5;
+  doc.setTextColor(80,80,80);doc.setFontSize(9);doc.setFont("helvetica","normal");
+  doc.text("Authorised Signature",M,y);
+  doc.text("Received & Accepted by Client",M+96,y);
+  y+=6;
+  const signLines=(closing.signOff||"Abhinav Sharma\nFounder & Director, Brag Systems").split("\n");
+  signLines.forEach((l,i)=>{
+    if(i===0){doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(26,26,26);}
+    else{doc.setFont("helvetica","normal");doc.setFontSize(8.5);doc.setTextColor(80,80,80);}
+    doc.text(l,M,y);y+=5;
   });
 
-  // REFERENCES PAGE
-  addPage();
-  doc.setFillColor(or,og,ob);doc.roundedRect(M,y,180,10,2,2,"F");
-  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("Reference List",M+4,y+7);y+=15;
-  doc.autoTable({head:[["State","Client","Project","Year"]],
-    body:[
-      ["Punjab","Lakshmi Rice Mills Pvt. Ltd.","2 × 5,000 MT paddy silos — full turnkey","2022"],
-      ["Haryana","Haryana Warehousing Corp.","1 × 10,000 MT wheat silo + cleaning + PLC","2021"],
-      ["West Bengal","Bengal Flour Mills Ltd.","3 × 3,000 MT wheat silos with aeration","2023"],
-      ["Chhattisgarh","CG Distillery Pvt. Ltd.","Maize intake + 2 × 5,000 MT silos","2022"],
-      ["Orissa","Odisha State Civil Supplies","5,000 MT rice flat-bottom silo complex","2020"],
-      ["Rajasthan","Rajasthan Oil & Grain Ind.","2 × 3,000 MT mustard hopper silos","2023"],
-      ["Punjab (Beas)","Beas Agro Processing Unit","Intake + 3 silos + automation — turnkey","2024"],
-    ],startY:y,margin:{left:M,right:M},
-    headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:9},bodyStyles:{fontSize:9},
-    columnStyles:{0:{cellWidth:26,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:52},2:{cellWidth:84},3:{cellWidth:18,halign:"center"}}});
+  // Footer
+  doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7.5);doc.setFont("helvetica","normal");
+  doc.text(closing.footerLine||"www.bragsystems.com",105,293,{align:"center"});
 
-  // THANK YOU PAGE
-  doc.addPage();
-  doc.setFillColor(26,26,26);doc.rect(0,0,210,297,"F");
-  doc.setFillColor(or,og,ob);doc.circle(170,240,65,"F");
-  doc.setFillColor(30,30,30);doc.circle(170,240,55,"F");
-  doc.setTextColor(or,og,ob);doc.setFontSize(10);doc.setFont("helvetica","bold");
-  doc.text("BRAG SYSTEMS",105,55,{align:"center",charSpace:3});
-  doc.setTextColor(255,255,255);doc.setFontSize(30);doc.setFont("helvetica","bold");
-  doc.text("Thank You!",105,80,{align:"center"});
-  doc.setFontSize(12);doc.setFont("helvetica","italic");doc.setTextColor(158,152,144);
-  doc.text(`${client.name||"Valued Partner"}${client.company?` · ${client.company}`:""}`,105,94,{align:"center"});
-  doc.setFontSize(15);doc.setFont("helvetica","bold");doc.setTextColor(or,og,ob);
-  doc.text('"Let\'s Build It Better!"',105,108,{align:"center"});
-  doc.setDrawColor(or,og,ob);doc.setLineWidth(0.5);doc.line(70,114,140,114);
-  doc.setTextColor(110,105,100);doc.setFontSize(9);doc.setFont("helvetica","normal");
-  doc.text("For and on behalf of Brag Systems",105,155,{align:"center"});
-  doc.setDrawColor(90,90,90);doc.setLineWidth(0.3);doc.line(78,178,132,178);
-  doc.setTextColor(or,og,ob);doc.setFontSize(10);doc.setFont("helvetica","bold");
-  doc.text("Abhinav Sharma",105,184,{align:"center"});
-  doc.setTextColor(120,115,110);doc.setFontSize(9);doc.setFont("helvetica","normal");
-  doc.text("Founder & Director · Brag Systems",105,190,{align:"center"});
-  doc.text(`Quote: ${quote.num}  |  Date: ${quote.date}`,105,197,{align:"center"});
-  doc.setTextColor(70,70,70);doc.setFontSize(8);
-  doc.text("www.bragsystems.com  ·  info@bragsystems.com  ·  +91 XXXXX XXXXX",105,272,{align:"center"});
-  doc.text("Eco Tower, Cyberwalk Tech Park, IMT Manesar, Gurugram, Haryana",105,278,{align:"center"});
-
-  // Page numbers
+  // Page numbers on all pages
   const total2=doc.getNumberOfPages();
-  for(let i=2;i<=total2;i++){
+  for(let i=2;i<=total2-1;i++){
     doc.setPage(i);
-    doc.setFontSize(8);doc.setTextColor(160,160,160);
-    doc.text(`Brag Systems  |  ${quote.num}  |  Page ${i} of ${total2}`,105,290,{align:"center"});
+    doc.setFillColor(or,og,ob);doc.rect(0,287,210,10,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont("helvetica","normal");
+    doc.text(`Brag Systems  |  Quote: ${quote.num}  |  Confidential`,M,293);
+    doc.text(`Page ${i} of ${total2}`,210-M,293,{align:"right"});
   }
 
   doc.save(`BragSystems_Quote_${quote.num}_${(client.company||"Client").replace(/\s+/g,"_")}.pdf`);
@@ -444,89 +639,75 @@ function App(){
   const [freight,setFreight]=useState(4);
   const [tax,setTax]=useState(18);
   const [terms,setTerms]=useState(JSON.parse(JSON.stringify(DEF_TERMS)));
+  const [cover,setCover]=useState({...DEF_COVER});
+  const [closing,setClosing]=useState({...DEF_CLOSING});
   const [toast,setToast]=useState("");
   const [savedList,setSavedList]=useState([]);
-  const [dbStatus,setDbStatus]=useState(sb?"connected":"not_configured");
   const [saving,setSaving]=useState(false);
-  const [loading,setLoading]=useState(false);
   const [itemModal,setItemModal]=useState(null);
   const [termModal,setTermModal]=useState(null);
   const [secModal,setSecModal]=useState(null);
   const [showSaved,setShowSaved]=useState(false);
   const [configModal,setConfigModal]=useState(false);
-  const [tempUrl,setTempUrl]=useState(SUPA_URL);
-  const [tempKey,setTempKey]=useState(SUPA_KEY);
+  const [sbConn,setSbConn]=useState(!!sb);
 
   const t=calcT(sections,pf,freight,tax,incoterm);
   const showT=msg=>{setToast(msg);setTimeout(()=>setToast(""),2800);};
 
-  // SUPABASE OPS
-  async function loadSavedQuotes(){
+  // SUPABASE
+  async function loadSaved(){
     if(!sb)return;
-    setLoading(true);
-    const{data,error}=await sb.from("quotes").select("id,quote_num,client_company,total,status,created_at").order("created_at",{ascending:false}).limit(30);
+    const{data}=await sb.from("quotes").select("id,quote_num,client_company,total,status,created_at").order("created_at",{ascending:false}).limit(30);
     if(data)setSavedList(data);
-    if(error)showT("Load error: "+error.message);
-    setLoading(false);
   }
-
-  useEffect(()=>{if(sb)loadSavedQuotes();},[]);
+  useEffect(()=>{if(sb)loadSaved();},[]);
 
   async function saveQuote(){
     if(!sb){setConfigModal(true);return;}
     setSaving(true);
     const payload={
-      quote_num:quote.num, quote_date:quote.date, validity:quote.validity,
-      client_name:client.name, client_company:client.company, client_city:client.city,
-      client_email:client.email, client_phone:client.phone, client_project:client.project,
-      client_silo_count:client.siloCount, client_capacity:client.capacity, client_grain:client.grain,
-      incoterm, pf, freight, tax,
-      sections:JSON.stringify(sections),
-      terms:JSON.stringify(terms),
-      total:Math.round(t.total),
-      status:"draft",
-      updated_at:new Date().toISOString(),
+      quote_num:quote.num,quote_date:quote.date,validity:quote.validity,
+      client_name:client.name,client_company:client.company,client_city:client.city,
+      client_email:client.email,client_phone:client.phone,client_project:client.project,
+      client_silo_count:client.siloCount,client_capacity:client.capacity,client_grain:client.grain,
+      incoterm,pf,freight,tax,
+      sections:JSON.stringify(sections),terms:JSON.stringify(terms),
+      cover:JSON.stringify(cover),closing:JSON.stringify(closing),
+      total:Math.round(t.total),status:"draft",updated_at:new Date().toISOString(),
     };
     const{error}=await sb.from("quotes").upsert([payload],{onConflict:"quote_num"});
     setSaving(false);
-    if(error)showT("❌ Save failed: "+error.message);
-    else{showT("✓ Saved to Supabase — "+quote.num);loadSavedQuotes();}
+    if(error)showT("Save failed: "+error.message);
+    else{showT("Saved — "+quote.num);loadSaved();}
   }
 
   async function loadQuote(id){
     if(!sb)return;
-    const{data,error}=await sb.from("quotes").select("*").eq("id",id).single();
-    if(error){showT("Load error: "+error.message);return;}
-    if(data){
-      setQuote({num:data.quote_num||"",date:data.quote_date||today,validity:data.validity||"90"});
-      setClient({name:data.client_name||"",company:data.client_company||"",city:data.client_city||"",email:data.client_email||"",phone:data.client_phone||"",project:data.client_project||"",siloCount:data.client_silo_count||"",capacity:data.client_capacity||"",grain:data.client_grain||""});
-      setIncoterm(data.incoterm||"exworks");
-      setPf(data.pf||3);setFreight(data.freight||4);setTax(data.tax||18);
-      try{setSections(JSON.parse(data.sections)||DEF_SECTIONS);}catch(e){setSections(DEF_SECTIONS);}
-      try{setTerms(JSON.parse(data.terms)||DEF_TERMS);}catch(e){setTerms(DEF_TERMS);}
-      setShowSaved(false);showT("Quote loaded: "+data.quote_num);
-    }
+    const{data}=await sb.from("quotes").select("*").eq("id",id).single();
+    if(!data)return;
+    setQuote({num:data.quote_num||"",date:data.quote_date||today,validity:data.validity||"90"});
+    setClient({name:data.client_name||"",company:data.client_company||"",city:data.client_city||"",email:data.client_email||"",phone:data.client_phone||"",project:data.client_project||"",siloCount:data.client_silo_count||"",capacity:data.client_capacity||"",grain:data.client_grain||""});
+    setIncoterm(data.incoterm||"exworks");setPf(data.pf||3);setFreight(data.freight||4);setTax(data.tax||18);
+    try{setSections(JSON.parse(data.sections));}catch(e){}
+    try{setTerms(JSON.parse(data.terms));}catch(e){}
+    try{setCover({...DEF_COVER,...JSON.parse(data.cover||"{}")});}catch(e){}
+    try{setClosing({...DEF_CLOSING,...JSON.parse(data.closing||"{}")});}catch(e){}
+    setShowSaved(false);showT("Loaded: "+data.quote_num);
   }
 
   async function deleteQuote(id,num){
-    if(!sb)return;
-    if(!window.confirm(`Delete quote ${num}?`))return;
+    if(!sb||!window.confirm("Delete "+num+"?"))return;
     await sb.from("quotes").delete().eq("id",id);
-    showT("Deleted: "+num);loadSavedQuotes();
+    showT("Deleted "+num);loadSaved();
   }
 
   async function updateStatus(id,status){
     if(!sb)return;
     await sb.from("quotes").update({status}).eq("id",id);
-    showT("Status updated: "+status);loadSavedQuotes();
+    loadSaved();
   }
 
-  // EQUIPMENT OPS
-  const updItem=(si,ii,key,val)=>setSections(prev=>{
-    const n=prev.map(s=>({...s,items:s.items.map(i=>({...i}))}));
-    n[si].items[ii]={...n[si].items[ii],[key]:["qty","exw","install"].includes(key)?+val:val};
-    return n;
-  });
+  // EQUIPMENT
   const saveItem=(si,ii,item)=>{
     if(ii===-1)setSections(p=>p.map((s,i)=>i===si?{...s,items:[...s.items,item]}:s));
     else setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?item:it)}:s));
@@ -534,167 +715,147 @@ function App(){
   };
   const delItem=(si,ii)=>setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s));
   const toggleSec=si=>setSections(p=>p.map((s,i)=>i===si?{...s,open:!s.open}:s));
-  const sEXW=s=>s.items.reduce((a,i)=>a+(i.qty||0)*(i.exw||0),0);
+  const sEXW=s=>s.items.reduce((a,i)=>a+(i.qty||0)*(i.unitPrice||0),0);
   const sInst=s=>s.items.reduce((a,i)=>a+(i.install||0),0);
   const sPF=s=>sEXW(s)*pf/100;
   const sFr=s=>incoterm==="exworks"?0:sEXW(s)*freight/100;
   const sTot=s=>sEXW(s)+sPF(s)+sFr(s)+sInst(s);
 
-  // TERMS OPS
+  // TERMS
   const saveTerm=(section,idx,text)=>{
     setTerms(prev=>{const n={...prev,[section]:[...prev[section]]};if(idx===-1)n[section].push(text);else n[section][idx]=text;return n;});
-    setTermModal(null);showT("Clause saved");
+    setTermModal(null);showT("Saved");
   };
   const delTerm=(section,idx)=>setTerms(prev=>({...prev,[section]:prev[section].filter((_,i)=>i!==idx)}));
 
-  // STATUS BADGE
-  const StatusBadge=({s})=>{
-    const map={draft:{bg:"#FFF3CD",c:"#856404"},sent:{bg:"#D1ECF1",c:"#0C5460"},accepted:{bg:"#D4EDDA",c:"#155724"},rejected:{bg:"#F8D7DA",c:"#721C24"}};
-    const m=map[s]||map.draft;
-    return <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:m.bg,color:m.c}}>{s}</span>;
-  };
+  // ── NAV ──────────────────────────────────────────────────
+  const Nav=()=>(
+    <div className="no-print" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 16px",background:"#fff",borderBottom:"1px solid #eee",position:"sticky",top:0,zIndex:50,flexWrap:"wrap",gap:5}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:30,height:30,background:O,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>BS</div>
+        <div><div style={{fontSize:12.5,fontWeight:700,color:DK,lineHeight:1.1}}>Brag Systems</div><div style={{fontSize:9,color:"#aaa"}}>Quote Builder</div></div>
+      </div>
+      <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+        {PAGES.map((p,i)=>(
+          <button key={i} onClick={()=>setPage(i)} style={{fontSize:10,padding:"3px 8px",borderRadius:5,cursor:"pointer",border:"none",background:page===i?O:"transparent",color:page===i?"#fff":"#888",fontWeight:page===i?700:400}}>{i===0?"⊞":i}</button>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+        <button onClick={()=>setPage(p=>Math.max(0,p-1))} style={{padding:"4px 10px",border:"1px solid #ddd",borderRadius:6,background:"#fff",cursor:"pointer",fontSize:12}}>←</button>
+        <button onClick={()=>setPage(p=>Math.min(9,p+1))} style={{padding:"4px 10px",border:"1px solid #ddd",borderRadius:6,background:"#fff",cursor:"pointer",fontSize:12}}>→</button>
+        <Btn ch="📄 PDF" onClick={()=>genPDF(client,quote,sections,pf,freight,tax,incoterm,terms,cover,closing)} small/>
+        <Btn ch={saving?"...":"☁"} onClick={saveQuote} small outline disabled={saving}/>
+        <Btn ch="📂" onClick={()=>{loadSaved();setShowSaved(true);}} small outline/>
+        <button onClick={()=>setConfigModal(true)} style={{padding:"4px 10px",border:`1px solid ${sbConn?"#4CAF50":"#E24B4A"}`,borderRadius:6,background:"#fff",cursor:"pointer",fontSize:11,color:sbConn?"#4CAF50":"#E24B4A",fontWeight:700}}>{sbConn?"DB ✓":"DB ⚠"}</button>
+      </div>
+    </div>
+  );
 
-  // ── PAGE: INDEX ───────────────────────────────────────────
+  // ── PAGE 0: INDEX ─────────────────────────────────────────
   const Index=()=>(
     <div style={{padding:"16px"}}>
-      <div style={{background:DK,borderRadius:12,padding:"22px 20px",marginBottom:16,position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",right:-30,top:-30,width:140,height:140,borderRadius:"50%",background:O,opacity:.09}}/>
+      <div style={{background:"#fff",border:"1px solid #eee",borderRadius:12,padding:"20px",marginBottom:14,borderTop:`4px solid ${O}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-          <div style={{width:36,height:36,background:O,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"#fff"}}>BS</div>
-          <div><div style={{fontSize:16,fontWeight:700,color:"#fff"}}>Brag Systems</div><div style={{fontSize:10,color:"#9E9890"}}>Quote Builder · Let's Build It Better!</div></div>
+          <div style={{width:38,height:38,background:O,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color:"#fff"}}>BS</div>
+          <div><div style={{fontSize:16,fontWeight:700}}>Brag Systems — Quote Builder</div><div style={{fontSize:11,color:"#888",marginTop:1}}>Let's Build It Better!</div></div>
         </div>
-        <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:10}}>
-          {[["Quote",quote.num],[client.company?"For":null,client.company],[t.total>0?"Value":null,fmt(t.total)]].filter(([k])=>k).map(([k,v])=>(
-            <div key={k} style={{fontSize:11,color:"#6B6560"}}>{k}<span style={{color:O,fontWeight:700,marginLeft:4}}>{v}</span></div>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:12}}>
+          {[["Quote",quote.num],["Date",quote.date],client.company&&["Client",client.company],t.total>0&&["Total",fmt(t.total)]].filter(Boolean).map(([k,v])=>(
+            <div key={k} style={{fontSize:11,color:"#666"}}>{k}: <strong style={{color:DK}}>{v}</strong></div>
           ))}
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <div style={{width:8,height:8,borderRadius:"50%",background:sb?"#4CAF50":"#E24B4A"}}/>
-          <span style={{fontSize:11,color:"#6B6560"}}>Supabase: <span style={{color:sb?"#4CAF50":"#E24B4A",fontWeight:600}}>{sb?"Connected":"Not configured"}</span></span>
-          {!sb&&<button onClick={()=>setConfigModal(true)} style={{fontSize:11,padding:"2px 8px",border:"1px solid "+O,borderRadius:5,background:"transparent",color:O,cursor:"pointer",fontWeight:600}}>Configure →</button>}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:sbConn?"#4CAF50":"#E24B4A"}}/>
+          <span style={{fontSize:11,color:"#666"}}>Supabase: <strong style={{color:sbConn?"#4CAF50":"#E24B4A"}}>{sbConn?"Connected":"Not configured"}</strong></span>
+          {!sbConn&&<button onClick={()=>setConfigModal(true)} style={{fontSize:11,padding:"2px 8px",border:`1px solid ${O}`,borderRadius:5,background:"transparent",color:O,cursor:"pointer",fontWeight:600}}>Configure →</button>}
         </div>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-        {PAGES.slice(1).map((p,i)=>(
-          <div key={p} onClick={()=>setPage(i+1)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#fff",border:"1px solid #eee",borderLeft:`3px solid ${O}`,borderRadius:8,cursor:"pointer"}}
+        {[
+          ["Cover","Client details, greeting & intro letter"],
+          ["Equipment","7 sections · add/edit/delete items · unit prices · specs"],
+          ["Pricing","Incoterm, GST, P&F — live totals"],
+          ["Tech Sheets","6 key equipment specifications"],
+          ["Timeline","22–24 week schedule · 9 phases"],
+          ["Layout","Schematic process flow diagram"],
+          ["Terms","Editable T&C · exclusions · legal"],
+          ["References","7 completed projects"],
+          ["Closing","Thank you · sign-off · cost summary"],
+        ].map(([p,d],i)=>(
+          <div key={p} onClick={()=>setPage(i+1)} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",background:"#fff",border:"1px solid #eee",borderLeft:`3px solid ${O}`,borderRadius:8,cursor:"pointer"}}
             onMouseOver={e=>e.currentTarget.style.background="#fdf8f2"}
             onMouseOut={e=>e.currentTarget.style.background="#fff"}>
-            <div style={{width:26,height:26,borderRadius:"50%",background:O,color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
-            <div>
-              <div style={{fontSize:12.5,fontWeight:700}}>{p}</div>
-              <div style={{fontSize:10,color:"#888",marginTop:1}}>
-                {["Client details & project introduction","Equipment in 7 sections — add/edit/delete","Live pricing with incoterm & GST","6 equipment specs","22–24 week schedule","Process flow diagram","Editable T&C and exclusions","7 completed reference projects","Closing, signature & next steps"][i]}
-              </div>
-            </div>
+            <div style={{width:24,height:24,borderRadius:"50%",background:O,color:"#fff",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
+            <div><div style={{fontSize:12.5,fontWeight:700}}>{p}</div><div style={{fontSize:10,color:"#888",marginTop:1}}>{d}</div></div>
           </div>
         ))}
       </div>
 
-      <div style={{background:"#f9f9f7",borderRadius:10,padding:"14px 16px",border:"1px solid #eee"}}>
-        <div style={{fontSize:11,fontWeight:700,marginBottom:10,color:"#555",textTransform:"uppercase",letterSpacing:"0.06em"}}>Quick actions</div>
+      <div style={{background:"#f9f9f7",borderRadius:10,padding:"12px 14px",border:"1px solid #eee"}}>
+        <div style={{fontSize:10,fontWeight:700,marginBottom:9,color:"#555",textTransform:"uppercase",letterSpacing:"0.06em"}}>Quick actions</div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <Btn ch="📄 Generate PDF" onClick={()=>genPDF(client,quote,sections,pf,freight,tax,incoterm,terms)}/>
-          <Btn ch={saving?"☁ Saving...":"☁ Save to Supabase"} onClick={saveQuote} outline disabled={saving}/>
-          <Btn ch="📂 Load / manage quotes" onClick={()=>{loadSavedQuotes();setShowSaved(true);}} outline/>
-          <Btn ch="↺ New quote" onClick={()=>{setSections(JSON.parse(JSON.stringify(DEF_SECTIONS)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DEF_TERMS)));setQuote({num:"BS-2025-"+(Date.now()%10000),date:today,validity:"90"});showT("New quote started");}} outline/>
+          <Btn ch="📄 Generate PDF" onClick={()=>genPDF(client,quote,sections,pf,freight,tax,incoterm,terms,cover,closing)}/>
+          <Btn ch={saving?"Saving...":"☁ Save to Supabase"} onClick={saveQuote} outline disabled={saving}/>
+          <Btn ch="📂 Load saved" onClick={()=>{loadSaved();setShowSaved(true);}} outline/>
+          <Btn ch="↺ New quote" onClick={()=>{setSections(JSON.parse(JSON.stringify(DEF_SECTIONS)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DEF_TERMS)));setCover({...DEF_COVER});setClosing({...DEF_CLOSING});setQuote({num:"BS-"+Date.now().toString().slice(-5),date:today,validity:"90"});showT("New quote started");}} outline/>
         </div>
       </div>
     </div>
   );
 
-  // ── PAGE: COVER ───────────────────────────────────────────
+  // ── PAGE 1: COVER (editable, printer-friendly) ────────────
   const Cover=()=>(
-    <div>
-      <div style={{background:`linear-gradient(135deg,${DK} 0%,#2D2D2D 100%)`,padding:"32px 20px 26px",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",right:-50,top:-50,width:220,height:220,borderRadius:"50%",background:O,opacity:.08}}/>
-        <div style={{position:"absolute",left:-40,bottom:-40,width:160,height:160,borderRadius:"50%",background:O,opacity:.05}}/>
-        <div style={{position:"relative"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-            <div style={{width:38,height:38,background:O,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:700,color:"#fff"}}>BS</div>
-            <div><div style={{fontSize:14,fontWeight:700,color:"#fff"}}>BRAG SYSTEMS</div><div style={{fontSize:10,color:"#9E9890"}}>Grain Storage Execution Partner · Since 2009</div></div>
-          </div>
-          <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:O,marginBottom:8,fontWeight:600}}>Quotation Document</div>
-          <div style={{fontSize:26,fontWeight:700,color:"#fff",lineHeight:1.2,marginBottom:4}}>Grain Storage<br/>Infrastructure Quotation</div>
-          <div style={{fontSize:13,color:"#9E9890",marginBottom:16,fontStyle:"italic"}}>"Let's Build It Better!"</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-            {[["Quote No.",quote.num],["Date",quote.date],["Valid for",quote.validity+" days"],["Incoterm",incoterm.toUpperCase()]].map(([k,v])=>(
-              <div key={k} style={{background:"rgba(255,255,255,.08)",borderRadius:7,padding:"5px 10px"}}>
-                <div style={{fontSize:9,color:"#6B6560",textTransform:"uppercase",letterSpacing:"0.05em"}}>{k}</div>
-                <div style={{fontSize:12,color:O,fontWeight:700,marginTop:1}}>{v}</div>
-              </div>
-            ))}
-          </div>
-          {client.company&&(
-            <div style={{background:"rgba(255,255,255,.07)",borderRadius:9,padding:"12px 14px",borderLeft:`3px solid ${O}`}}>
-              <div style={{fontSize:9,color:"#6B6560",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Prepared for</div>
-              <div style={{fontSize:17,fontWeight:700,color:"#fff",marginBottom:3}}>{client.company}</div>
-              <div style={{fontSize:12,color:"#9E9890"}}>{client.name}{client.city&&` · ${client.city}`}</div>
-              {client.project&&<div style={{fontSize:11,color:O,marginTop:5,fontStyle:"italic"}}>{client.project}</div>}
-              {(client.siloCount||client.capacity||client.grain)&&(
-                <div style={{display:"flex",gap:10,marginTop:8,flexWrap:"wrap"}}>
-                  {client.siloCount&&<span style={{fontSize:11,color:"#9E9890"}}>Silos: <strong style={{color:"#fff"}}>{client.siloCount}</strong></span>}
-                  {client.capacity&&<span style={{fontSize:11,color:"#9E9890"}}>Capacity: <strong style={{color:"#fff"}}>{client.capacity} MT</strong></span>}
-                  {client.grain&&<span style={{fontSize:11,color:"#9E9890"}}>Grain: <strong style={{color:"#fff"}}>{client.grain}</strong></span>}
-                </div>
-              )}
-            </div>
-          )}
+    <div style={{padding:"16px"}}>
+      {/* Live preview header */}
+      <div style={{background:"#fff",border:"1px solid #eee",borderRadius:10,overflow:"hidden",marginBottom:14}}>
+        <div style={{background:O,padding:"8px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#fff"}}>{cover.headerLine}</span>
         </div>
+        <div style={{padding:"14px",borderBottom:"1px solid #eee"}}>
+          <div style={{fontSize:10,color:"#888",marginBottom:3,textTransform:"uppercase",letterSpacing:"0.05em"}}>Prepared for</div>
+          <div style={{fontSize:15,fontWeight:700}}>{client.company||"[Company name]"}</div>
+          <div style={{fontSize:12,color:"#666",marginTop:2}}>{client.name} {client.city&&`· ${client.city}`}</div>
+          {client.project&&<div style={{fontSize:11,color:O,marginTop:3,fontStyle:"italic"}}>{client.project}</div>}
+        </div>
+        <div style={{padding:"12px 14px",background:"#f9f9f7",fontSize:12,color:"#555",lineHeight:1.7,fontStyle:"italic"}}>"{cover.intro?.substring(0,160)}..."</div>
       </div>
-      <div style={{padding:"16px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>
-          {[["15+","Years Experience"],["50+","Projects"],["7","States"],["100%","Turnkey"]].map(([v,l])=>(
-            <div key={l} style={{background:"#fff",borderRadius:8,padding:"14px 8px",textAlign:"center",border:"1px solid #eee",borderTop:`3px solid ${O}`}}>
-              <div style={{fontSize:22,fontWeight:700,color:O}}>{v}</div>
-              <div style={{fontSize:10,color:"#888",marginTop:3,fontWeight:600}}>{l}</div>
-            </div>
-          ))}
-        </div>
-        <h3 style={{fontSize:13,fontWeight:700,marginBottom:10}}>Client & project details</h3>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-          <F label="Client name" val={client.name} fn={v=>setClient(c=>({...c,name:v}))} ph="Mr / Ms / Contact person"/>
-          <F label="Company / Organisation" val={client.company} fn={v=>setClient(c=>({...c,company:v}))} ph="Company name"/>
-          <F label="City / State" val={client.city} fn={v=>setClient(c=>({...c,city:v}))} ph="e.g. Ludhiana, Punjab"/>
-          <F label="Email" val={client.email} fn={v=>setClient(c=>({...c,email:v}))} ph="email@company.com"/>
-          <F label="Phone" val={client.phone} fn={v=>setClient(c=>({...c,phone:v}))} ph="+91 XXXXX XXXXX"/>
-          <F label="Project description" val={client.project} fn={v=>setClient(c=>({...c,project:v}))} ph="e.g. 5000 MT Rice Storage"/>
-          <F label="No. of silos" val={client.siloCount} fn={v=>setClient(c=>({...c,siloCount:v}))} ph="e.g. 2"/>
-          <F label="Total capacity (MT)" val={client.capacity} fn={v=>setClient(c=>({...c,capacity:v}))} ph="e.g. 10,000"/>
-          <F label="Grain type" val={client.grain} fn={v=>setClient(c=>({...c,grain:v}))} ph="e.g. Paddy, Wheat, Maize"/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-          <F label="Quote number" val={quote.num} fn={v=>setQuote(q=>({...q,num:v}))}/>
-          <F label="Validity (days)" val={quote.validity} fn={v=>setQuote(q=>({...q,validity:v}))} type="number"/>
-        </div>
-        <div style={{borderLeft:`3px solid ${O}`,padding:"12px 16px",background:"#fdf8f2",borderRadius:"0 8px 8px 0",marginBottom:16}}>
-          <p style={{fontSize:12.5,lineHeight:1.8,color:"#555",fontStyle:"italic",marginBottom:10}}>"At Brag Systems, we don't just supply equipment — we take complete ownership of your grain storage project from concept to commissioning. Your existing facility is good. We are here to make it better. Every silo we execute reflects 15 years of hands-on field learning from Punjab to West Bengal, from rice mills to distilleries. We treat your investment as our own."</p>
-          <p style={{fontSize:12,fontWeight:700,color:DK}}>— Abhinav Sharma, Founder & Director</p>
-          <p style={{fontSize:11,color:"#888",marginTop:3}}>B.E. Agricultural Engineering (G.B. Pant University) · Ex-AGCO GSI · Ex-Bühler · Ex-Schmidt-Seeger</p>
-          <p style={{fontSize:11,color:"#888",marginTop:2}}>🏢 Eco Tower, Cyberwalk Tech Park, IMT Manesar, Gurugram &nbsp;·&nbsp; ✉ info@bragsystems.com</p>
-        </div>
-        <div style={{background:"#f0f9f0",borderRadius:8,padding:"12px 14px",border:"1px solid #c8e6c8",marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#2e7d32",marginBottom:6}}>Our commitment to you</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-            {["One site supervisor — complete accountability","No multi-vendor confusion — single point contact","Proven execution across 7 Indian states","Post-commissioning support & 12-month DLP"].map(c=>(
-              <div key={c} style={{fontSize:11.5,color:"#444",display:"flex",gap:6}}><span style={{color:"#2e7d32",fontWeight:700}}>✓</span>{c}</div>
-            ))}
-          </div>
-        </div>
-        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-          <Btn ch="View equipment list →" onClick={()=>setPage(2)}/>
-          <Btn ch="☁ Save quote" onClick={saveQuote} outline disabled={saving}/>
-        </div>
+
+      <h3 style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#333"}}>Client details</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+        <SF label="Client name" val={client.name} fn={v=>setClient(c=>({...c,name:v}))} ph="Contact person name"/>
+        <SF label="Company" val={client.company} fn={v=>setClient(c=>({...c,company:v}))} ph="Company name"/>
+        <SF label="City / State" val={client.city} fn={v=>setClient(c=>({...c,city:v}))} ph="e.g. Ludhiana, Punjab"/>
+        <SF label="Email" val={client.email} fn={v=>setClient(c=>({...c,email:v}))} ph="email@company.com"/>
+        <SF label="Phone" val={client.phone} fn={v=>setClient(c=>({...c,phone:v}))} ph="+91 XXXXX XXXXX"/>
+        <SF label="Project description" val={client.project} fn={v=>setClient(c=>({...c,project:v}))} ph="e.g. 5000 MT Rice Storage"/>
+        <SF label="No. of silos" val={client.siloCount} fn={v=>setClient(c=>({...c,siloCount:v}))} ph="e.g. 2"/>
+        <SF label="Total capacity (MT)" val={client.capacity} fn={v=>setClient(c=>({...c,capacity:v}))} ph="e.g. 10,000"/>
+        <SF label="Grain type" val={client.grain} fn={v=>setClient(c=>({...c,grain:v}))} ph="Paddy / Wheat / Maize"/>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+        <SF label="Quote number" val={quote.num} fn={v=>setQuote(q=>({...q,num:v}))}/>
+        <SF label="Validity (days)" val={quote.validity} fn={v=>setQuote(q=>({...q,validity:v}))} type="number"/>
+      </div>
+
+      <h3 style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#333"}}>Cover letter content <span style={{fontSize:10,color:"#888",fontWeight:400}}>— all editable, appears in PDF</span></h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:8}}>
+        <SF label="Header line (top of every PDF page)" val={cover.headerLine} fn={v=>setCover(c=>({...c,headerLine:v}))} ph="Brag Systems — India's Grain Storage Execution Partner"/>
+        <SF label="Footer line (bottom of every PDF page)" val={cover.footerLine} fn={v=>setCover(c=>({...c,footerLine:v}))} ph="www.bragsystems.com | info@bragsystems.com"/>
+        <SF label="Greeting" val={cover.greeting} fn={v=>setCover(c=>({...c,greeting:v}))} ph="Dear Sir / Madam,"/>
+        <SF label="Introduction paragraph" val={cover.intro} fn={v=>setCover(c=>({...c,intro:v}))} rows={3} ph="Thank you for your enquiry..."/>
+        <SF label="Closing paragraph" val={cover.closingBody} fn={v=>setCover(c=>({...c,closingBody:v}))} rows={2} ph="We look forward to your positive response..."/>
+        <SF label="Founder / signatory block" val={cover.founderNote} fn={v=>setCover(c=>({...c,founderNote:v}))} rows={4} ph="Abhinav Sharma\nFounder & Director..."/>
       </div>
     </div>
   );
 
-  // ── PAGE: EQUIPMENT ────────────────────────────────────────
+  // ── PAGE 2: EQUIPMENT ─────────────────────────────────────
   const Equipment=()=>(
     <div style={{padding:"0 16px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:6,marginBottom:10}}>
         <div><h2 style={{fontSize:14,fontWeight:700}}>Equipment list</h2>
-          <p style={{fontSize:11,color:"#888",marginTop:2}}>{sections.reduce((a,s)=>a+s.items.length,0)} items · {sections.length} sections · ✎ to edit · ✕ to remove</p></div>
+          <p style={{fontSize:11,color:"#888",marginTop:2}}>✎ edit · ✕ remove · ⊕ add item · Includes unit price & technical specs</p></div>
         <Btn ch="+ Section" onClick={()=>setSecModal(true)} small/>
       </div>
       {sections.map((sec,si)=>(
@@ -706,55 +867,67 @@ function App(){
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <span style={{fontSize:12,fontWeight:700,color:O}}>{fmt(sEXW(sec))}</span>
-              <button onClick={e=>{e.stopPropagation();setItemModal({si,ii:-1,item:{desc:"",qty:1,unit:"Nos",exw:0,install:0}});}} style={{fontSize:10,padding:"2px 7px",border:"1px solid #ddd",borderRadius:5,background:"#fff",cursor:"pointer",color:"#555"}}>+ item</button>
-              <button onClick={e=>{e.stopPropagation();if(window.confirm("Remove this section?"))setSections(p=>p.filter((_,i)=>i!==si));}} style={{background:"none",border:"none",cursor:"pointer",color:"#ddd",fontSize:14,padding:"0 2px"}}>🗑</button>
+              <button onClick={e=>{e.stopPropagation();setItemModal({si,ii:-1,item:{desc:"",qty:1,unit:"Nos",unitPrice:0,install:0,specs:""}});}} style={{fontSize:10,padding:"2px 7px",border:"1px solid #ddd",borderRadius:5,background:"#fff",cursor:"pointer"}}>⊕ item</button>
+              <button onClick={e=>{e.stopPropagation();if(window.confirm("Remove section?"))setSections(p=>p.filter((_,i)=>i!==si));}} style={{background:"none",border:"none",cursor:"pointer",color:"#ddd",fontSize:13}}>🗑</button>
               <span style={{color:"#bbb",fontSize:11}}>{sec.open?"▲":"▼"}</span>
             </div>
           </div>
           {sec.open&&<div>
-            <div style={{display:"grid",gridTemplateColumns:"2.5fr 44px 52px 100px 100px 60px",background:"#f9f9f7",borderBottom:"1px solid #eee"}}>
-              {["Description","Qty","Unit","EXW (₹)","Install (₹)",""].map((h,i)=>(
-                <div key={i} style={{padding:"4px 7px",fontSize:9.5,fontWeight:700,color:"#999",textTransform:"uppercase"}}>{h}</div>
+            {/* Column headers */}
+            <div style={{display:"grid",gridTemplateColumns:"2fr 44px 48px 110px 110px 95px 56px",background:"#f9f9f7",borderBottom:"1px solid #eee"}}>
+              {["Description","Qty","Unit","Unit Price (Rs.)","EXW Total (Rs.)","Install / Service (Rs.)",""].map((h,i)=>(
+                <div key={i} style={{padding:"4px 7px",fontSize:9,fontWeight:700,color:"#999",textTransform:"uppercase",letterSpacing:"0.03em"}}>{h}</div>
               ))}
             </div>
             {sec.items.map((item,ii)=>(
-              <div key={ii} style={{display:"grid",gridTemplateColumns:"2.5fr 44px 52px 100px 100px 60px",borderBottom:"1px solid #f5f5f5",alignItems:"center"}}>
-                <div style={{padding:"5px 7px",fontSize:12,color:"#333"}}>{item.desc}</div>
-                <div style={{padding:"5px 7px",fontSize:12,textAlign:"center"}}>{item.qty}</div>
-                <div style={{padding:"5px 7px",fontSize:12}}>{item.unit}</div>
-                <div style={{padding:"5px 7px",fontSize:12,textAlign:"right"}}>{fmt((item.qty||0)*(item.exw||0))}</div>
-                <div style={{padding:"5px 7px",fontSize:12,textAlign:"right"}}>{fmt(item.install||0)}</div>
-                <div style={{padding:"5px 7px",display:"flex",gap:4,justifyContent:"center"}}>
-                  <button onClick={()=>setItemModal({si,ii,item:{...item}})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer"}}>✎</button>
-                  <button onClick={()=>delItem(si,ii)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>✕</button>
+              <div key={ii}>
+                {/* Main row */}
+                <div style={{display:"grid",gridTemplateColumns:"2fr 44px 48px 110px 110px 95px 56px",borderBottom:item.specs?"none":"1px solid #f0f0f0",background:ii%2===0?"#fff":"#fafafa",alignItems:"center"}}>
+                  <div style={{padding:"6px 7px",fontSize:12,fontWeight:500}}>{item.desc}</div>
+                  <div style={{padding:"6px 7px",fontSize:12,textAlign:"center"}}>{item.qty}</div>
+                  <div style={{padding:"6px 7px",fontSize:12}}>{item.unit}</div>
+                  <div style={{padding:"6px 7px",fontSize:12,textAlign:"right",fontFamily:"monospace"}}>{fmt(item.unitPrice||0)}</div>
+                  <div style={{padding:"6px 7px",fontSize:12,textAlign:"right",fontWeight:600,color:O,fontFamily:"monospace"}}>{fmt((item.qty||0)*(item.unitPrice||0))}</div>
+                  <div style={{padding:"6px 7px",fontSize:12,textAlign:"right",color:"#555",fontFamily:"monospace"}}>{fmt(item.install||0)}</div>
+                  <div style={{padding:"5px 6px",display:"flex",gap:3,justifyContent:"center"}}>
+                    <button onClick={()=>setItemModal({si,ii,item:{...item}})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer"}}>✎</button>
+                    <button onClick={()=>delItem(si,ii)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>✕</button>
+                  </div>
                 </div>
+                {/* Specs row */}
+                {item.specs&&(
+                  <div style={{padding:"3px 7px 6px 10px",background:ii%2===0?"#fafff8":"#f5faf3",borderBottom:"1px solid #f0f0f0",borderLeft:`2px solid ${O}`}}>
+                    <span style={{fontSize:10,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.03em"}}>Spec: </span>
+                    <span style={{fontSize:11,color:"#555"}}>{item.specs}</span>
+                  </div>
+                )}
               </div>
             ))}
-            {sec.items.length===0&&<div style={{padding:"14px",textAlign:"center",color:"#aaa",fontSize:12}}>No items yet — click "+ item" above to add</div>}
-            <div style={{padding:"6px 8px",background:"#fdf8f2",display:"flex",justifyContent:"space-between",borderTop:"1px solid #f5e8d0"}}>
-              <span style={{fontSize:11,color:"#888"}}>Section subtotal</span>
-              <span style={{fontSize:12,fontWeight:700,color:O}}>{fmt(sEXW(sec))} EXW + {fmt(sInst(sec))} install</span>
+            {sec.items.length===0&&<div style={{padding:"14px",textAlign:"center",color:"#aaa",fontSize:12}}>No items — click ⊕ item above</div>}
+            <div style={{padding:"7px 10px",background:"#fdf8f2",display:"flex",justifyContent:"space-between",borderTop:"1px solid #f5e8d0"}}>
+              <span style={{fontSize:11,color:"#888"}}>Section supply (EXW): <strong style={{color:O}}>{fmt(sEXW(sec))}</strong></span>
+              <span style={{fontSize:11,color:"#888"}}>Installation service: <strong style={{color:"#555"}}>{fmt(sInst(sec))}</strong></span>
             </div>
           </div>}
         </div>
       ))}
       <div style={{background:"#fdf8f2",borderRadius:8,padding:"12px 14px",border:`1.5px solid ${O}`}}>
-        <PRow label="Total equipment (ex-works)" val={fmt(t.exw)}/>
-        <PRow label="Total installation (indicative)" val={fmt(t.inst)}/>
-        <PRow label="Combined value (ex-tax, incl. install)" val={fmt(t.exw+t.inst)} grand/>
+        <PRow label="Total supply — equipment (ex-works)" val={fmt(t.exw)}/>
+        <PRow label="Total installation / erection service (indicative)" val={fmt(t.inst)} muted/>
+        <PRow label="Combined project value (supply + service, ex-tax)" val={fmt(t.exw+t.inst)} grand/>
       </div>
     </div>
   );
 
-  // ── PAGE: PRICING ─────────────────────────────────────────
+  // ── PAGE 3: PRICING ───────────────────────────────────────
   const Pricing=()=>(
     <div style={{padding:"0 16px"}}>
       <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Pricing & incoterms</h2>
-      <p style={{fontSize:11,color:"#888",marginBottom:12}}>Select incoterm · Adjust charges · All totals recalculate live</p>
+      <p style={{fontSize:11,color:"#888",marginBottom:12}}>Select incoterm · Adjust charges · Recalculates live</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-        {[{id:"exworks",t:"Ex-Works (EXW)",d:"Price at factory gate. Buyer arranges all transport."},
-          {id:"for",t:"FOR / FOB",d:"Loaded on buyer's vehicle. Packing included, freight excluded."},
-          {id:"cif",t:"Delivered (CIF)",d:"Delivered to site. Packing, freight & insurance included."}
+        {[{id:"exworks",t:"Ex-Works (EXW)",d:"Factory gate. Buyer arranges transport."},
+          {id:"for",t:"FOR / FOB",d:"Loaded on buyer's vehicle. Packing included."},
+          {id:"cif",t:"Delivered (CIF)",d:"Delivered to site. Packing + freight included."}
         ].map(ic=>(
           <div key={ic.id} onClick={()=>setIncoterm(ic.id)} style={{border:incoterm===ic.id?`2px solid ${O}`:"1px solid #eee",borderRadius:8,padding:"10px",cursor:"pointer",background:incoterm===ic.id?"#fdf8f2":"#fff"}}>
             <div style={{fontSize:12,fontWeight:700,marginBottom:3,color:incoterm===ic.id?O:DK}}>{ic.t}</div>
@@ -763,48 +936,62 @@ function App(){
         ))}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-        <F label="Packing & forwarding (%)" val={pf} fn={v=>setPf(+v)} type="number"/>
-        <F label="Freight & logistics (%)" val={freight} fn={v=>setFreight(+v)} type="number"/>
-        <F label="GST / Tax (%)" val={tax} fn={v=>setTax(+v)} type="number"/>
+        <div style={{display:"flex",flexDirection:"column",gap:3}}><label style={LS}>Packing & forwarding (%)</label><input type="number" value={pf} onChange={e=>setPf(+e.target.value)} style={IS}/></div>
+        <div style={{display:"flex",flexDirection:"column",gap:3}}><label style={LS}>Freight (%)</label><input type="number" value={freight} onChange={e=>setFreight(+e.target.value)} style={IS}/></div>
+        <div style={{display:"flex",flexDirection:"column",gap:3}}><label style={LS}>GST (%)</label><input type="number" value={tax} onChange={e=>setTax(+e.target.value)} style={IS}/></div>
       </div>
-      <div style={{height:1,background:"#eee",margin:"0 0 14px"}}/>
-      {sections.map((sec,si)=>(
-        <div key={si} style={{background:"#f9f9f7",borderRadius:8,padding:"10px 12px",marginBottom:8,border:"1px solid #eee"}}>
-          <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#888",marginBottom:7,display:"flex",alignItems:"center",gap:6}}>
-            <div style={{width:16,height:16,borderRadius:"50%",background:O,color:"#fff",fontSize:8,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{sec.id}</div>{sec.name}
-          </div>
-          <PRow label="Equipment ex-works" val={fmt(sEXW(sec))}/>
-          <PRow label={`P&F (${pf}%)`} val={fmt(sPF(sec))}/>
-          {incoterm!=="exworks"&&<PRow label={`Freight (${freight}%)`} val={fmt(sFr(sec))}/>}
-          <PRow label="Installation" val={fmt(sInst(sec))}/>
-          <PRow label="Section total" val={fmt(sTot(sec))} total/>
+
+      <div style={{background:"#fff",border:"1px solid #eee",borderRadius:10,marginBottom:12,overflow:"hidden"}}>
+        <div style={{background:O,padding:"7px 12px",display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr"}}>
+          {["Section","EXW Supply","P&F","Freight","Install"].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:"#fff",textTransform:"uppercase"}}>{h}</span>)}
         </div>
-      ))}
-      <div style={{background:"#fdf8f2",borderRadius:10,padding:"14px 16px",border:`2px solid ${O}`}}>
-        <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:O,letterSpacing:"0.08em",marginBottom:10}}>Final project summary</div>
-        <PRow label="Total equipment (ex-works)" val={fmt(t.exw)}/>
-        <PRow label={`Packing & forwarding (${pf}%)`} val={fmt(t.pf)}/>
-        {incoterm!=="exworks"&&<PRow label={`Freight (${freight}%)`} val={fmt(t.fr)}/>}
-        <PRow label="Sub-total (before tax)" val={fmt(t.sub)}/>
-        <PRow label={`GST @ ${tax}%`} val={fmt(t.tax)}/>
-        <PRow label="Installation (indicative)" val={fmt(t.inst)}/>
-        <PRow label="TOTAL PROJECT COST" val={fmt(t.total)} grand/>
+        {sections.map((sec,si)=>(
+          <div key={si} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"6px 12px",borderBottom:"1px solid #f0f0f0",fontSize:12,background:si%2===0?"#fff":"#fafafa"}}>
+            <span style={{fontWeight:500,fontSize:11}}>{sec.id}. {sec.name.length>30?sec.name.substring(0,30)+"...":sec.name}</span>
+            <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11}}>{fmt(sEXW(sec))}</span>
+            <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#888"}}>{fmt(sPF(sec))}</span>
+            <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#888"}}>{fmt(sFr(sec))}</span>
+            <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#555"}}>{fmt(sInst(sec))}</span>
+          </div>
+        ))}
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"8px 12px",background:"#f9f9f7",fontWeight:700}}>
+          <span style={{fontSize:11}}>TOTALS</span>
+          <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:O}}>{fmt(t.exw)}</span>
+          <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#888"}}>{fmt(t.pf)}</span>
+          <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#888"}}>{fmt(t.fr)}</span>
+          <span style={{textAlign:"right",fontFamily:"monospace",fontSize:11,color:"#555"}}>{fmt(t.inst)}</span>
+        </div>
+      </div>
+
+      <div style={{background:"#fff",border:"1px solid #eee",borderRadius:10,padding:"14px 16px",marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#333",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em"}}>Supply — commercial summary</div>
+        <PRow label="A. Equipment supply (ex-works)" val={fmt(t.exw)}/>
+        <PRow label={`   Packing & forwarding (${pf}%)`} val={fmt(t.pf)} muted/>
+        {incoterm!=="exworks"&&<PRow label={`   Freight & logistics (${freight}%)`} val={fmt(t.fr)} muted/>}
+        <PRow label="B. Supply sub-total (before tax)" val={fmt(t.sub)}/>
+        <PRow label={`   GST @ ${tax}% on supply`} val={fmt(t.tax)} muted/>
+        <div style={{height:1,background:"#eee",margin:"8px 0"}}/>
+        <div style={{fontSize:11,fontWeight:700,color:"#333",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Service — installation</div>
+        <PRow label="C. Installation / erection service (indicative)" val={fmt(t.inst)} muted/>
+        <p style={{fontSize:10,color:"#aaa",marginTop:4,marginBottom:8}}>* Billed separately on actuals. Above is indicative based on standard rates.</p>
+        <div style={{height:1,background:"#eee",margin:"8px 0"}}/>
+        <PRow label="TOTAL PROJECT COST (A+B+C)" val={fmt(t.total)} grand/>
       </div>
     </div>
   );
 
-  // ── PAGE: TECH SHEETS ──────────────────────────────────────
+  // ── PAGE 4: TECH SHEETS ───────────────────────────────────
   const TechSheets=()=>(
     <div style={{padding:"0 16px"}}>
       <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Technical data sheets</h2>
       <p style={{fontSize:11,color:"#888",marginBottom:12}}>Key specifications · Confirmed at order stage</p>
       {[
-        {name:"Bucket Elevator",model:"BE-60-25",specs:[["Capacity","60 TPH"],["Head height","25 m"],["Motor","15 kW"],["Material","MS Hot-Dip Galvanized"],["Belt","EP-315/3 Rubber, 400mm wide"],["Speed","1.8 m/s"],["Bearings","SKF / FAG sealed"],["Finish","Epoxy + PU topcoat"]]},
+        {name:"Bucket Elevator",model:"BE-60-25",specs:[["Capacity","60 TPH"],["Head height","25 m"],["Motor","15 kW"],["Construction","MS Hot-Dip Galvanized"],["Belt","EP-315/3 Rubber, 400mm wide"],["Speed","1.8 m/s"],["Bearings","SKF / FAG sealed"],["Finish","Epoxy + PU topcoat"]]},
         {name:"Flat Bed Vibratory Screen",model:"VFS-60",specs:[["Capacity","60 TPH"],["Decks","3-deck MS perforated"],["Mesh","Top 8mm / Mid 3mm / Bottom 1.5mm"],["Drive","Eccentric flywheel, 960 RPM"],["Motor","7.5 kW TEFC"],["Outlets","3 fractions + tailings"]]},
-        {name:"PLC Control System",model:"Siemens S7-1200",specs:[["I/O","64 DI / 48 DO / 16 AI / 8 AO"],["HMI","15\" Colour Touchscreen"],["Comms","Profinet / Ethernet-IP"],["Protocol","Modbus TCP, OPC-UA"],["Enclosure","IP54 MS panel"],["Backup","UPS 30 min battery"]]},
-        {name:"Centrifugal Aeration Fan",model:"CAF-7.5",specs:[["Air flow","18,000 m³/hr per fan"],["Static P","250 Pa"],["Motor","7.5 kW IE3"],["Speed","960 RPM"],["Impeller","Backward curved GI"],["Outlet","400mm flanged"]]},
-        {name:"Grain Monitoring System",model:"OPI-GMS-8",specs:[["Cables","8 temp/moisture cables"],["Sensors","12 per cable @ 1.5m"],["Temp","-20°C to +70°C"],["MC","10–30%"],["Accuracy","±0.3°C / ±0.5% MC"],["Interface","Web + mobile app"]]},
-        {name:"Sweep Auger with Tractor Drive",model:"SAU-D/2",specs:[["Reach","Exactly R/2 (half diameter)"],["Auger","6\", 150mm pitch MS flight"],["Tractor","4 PU wheels, 1.5 kW gearmotor"],["Revolution","2 RPM"],["Drive","3 kW centre gearbox"],["Finish","Hot-dip galvanized"]]},
+        {name:"PLC Control System",model:"Siemens S7-1200",specs:[["I/O","64 DI / 48 DO / 16 AI / 8 AO"],["HMI","15 inch Colour Touchscreen"],["Comms","Profinet / Ethernet-IP"],["Protocol","Modbus TCP, OPC-UA"],["Enclosure","IP54 MS panel"],["Backup","UPS 30 min battery"]]},
+        {name:"Centrifugal Aeration Fan",model:"CAF-7.5",specs:[["Air flow","18,000 m3/hr per fan"],["Static P","250 Pa"],["Motor","7.5 kW IE3"],["Speed","960 RPM"],["Impeller","Backward curved GI"],["Outlet","400mm flanged"]]},
+        {name:"Grain Monitoring System",model:"OPI-GMS-8",specs:[["Cables","8 temp/moisture cables"],["Sensors","12 per cable at 1.5m"],["Temp","-20 to +70 deg C"],["MC","10-30%"],["Accuracy","+/-0.3 deg / +/-0.5% MC"],["Interface","Web + mobile app"]]},
+        {name:"Sweep Auger with Tractor Drive",model:"SAU-D/2",specs:[["Reach","Exactly R/2 (half diameter)"],["Auger","6 inch, 150mm pitch MS flight"],["Tractor","4 PU wheels, 1.5 kW gearmotor"],["Revolution","2 RPM"],["Drive","3 kW centre gearbox"],["Finish","Hot-dip galvanized"]]},
       ].map((sh,idx)=>(
         <div key={idx} style={{background:"#fff",border:"1px solid #eee",borderRadius:10,marginBottom:10,overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid #eee",background:"#f9f9f7"}}>
@@ -815,7 +1002,7 @@ function App(){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
             {sh.specs.map(([k,v],i)=>(
               <div key={k} style={{padding:"6px 12px",borderBottom:"1px solid #f5f5f5",borderRight:i%2===0?"1px solid #f5f5f5":"none",fontSize:11.5}}>
-                <label style={{...lblSt,marginBottom:1}}>{k}</label><div>{v}</div>
+                <label style={{...LS,marginBottom:1}}>{k}</label><div>{v}</div>
               </div>
             ))}
           </div>
@@ -824,26 +1011,26 @@ function App(){
     </div>
   );
 
-  // ── PAGE: TIMELINE ─────────────────────────────────────────
+  // ── PAGE 5: TIMELINE ──────────────────────────────────────
   const Timeline=()=>{
     const phases=[
-      {w:"Week 1–2",t:"Order Finalisation & Kickoff",d:"Contract signing, 30% advance, site survey, drawing approval kickoff"},
-      {w:"Week 3–4",t:"Engineering & Drawing Approval",d:"GA, foundation, SLD submitted for client approval within 10 working days"},
-      {w:"Week 5–8",t:"Civil & Foundation Work",d:"Silo foundation, plinths, pit — client scope, supervised by Brag Systems"},
-      {w:"Week 7–12",t:"Equipment Manufacturing & FAT",d:"Fabrication + Factory Acceptance Testing before dispatch"},
-      {w:"Week 12–14",t:"Dispatch & Site Delivery",d:"Progressive dispatch with site receipt inspection checklist"},
-      {w:"Week 14–20",t:"Silo Erection & Mechanical Install",d:"Structure, equipment, ductwork, catwalk, staircase"},
-      {w:"Week 20–22",t:"Electrical & Automation Install",d:"MCC, PLC programming, sensors, earthing, lightning protection"},
-      {w:"Week 22–24",t:"Commissioning & Trial Run",d:"No-load trial, grain trial, PLC tuning, aeration & monitoring"},
+      {w:"Week 1-2",t:"Order Finalisation & Kickoff",d:"Contract signing, 30% advance, site survey, drawing approval kickoff"},
+      {w:"Week 3-4",t:"Engineering & Drawing Approval",d:"GA, foundation, SLD submitted for client approval within 10 working days"},
+      {w:"Week 5-8",t:"Civil & Foundation Work",d:"Silo foundation, plinths, pit — client scope, supervised by Brag Systems"},
+      {w:"Week 7-12",t:"Equipment Manufacturing & FAT",d:"Fabrication + Factory Acceptance Testing before dispatch"},
+      {w:"Week 12-14",t:"Dispatch & Site Delivery",d:"Progressive dispatch with site receipt inspection checklist"},
+      {w:"Week 14-20",t:"Silo Erection & Mechanical Install",d:"Structure, equipment, ductwork, catwalk, staircase"},
+      {w:"Week 20-22",t:"Electrical & Automation Install",d:"MCC, PLC programming, sensors, earthing, lightning protection"},
+      {w:"Week 22-24",t:"Commissioning & Trial Run",d:"No-load trial, grain trial, PLC tuning, aeration & monitoring"},
       {w:"Week 24",t:"Handover & Training",d:"O&M manual, 2-day training, as-built drawings, 12-month DLP begins"},
     ];
     return(
       <div style={{padding:"0 16px"}}>
         <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Project timeline</h2>
-        <p style={{fontSize:11,color:"#888",marginBottom:12}}>Indicative for single silo · Multi-silo: +4–8 weeks · Subject to civil readiness</p>
+        <p style={{fontSize:11,color:"#888",marginBottom:12}}>Indicative for single silo · Multi-silo add 4-8 weeks</p>
         <div style={{background:"#fff",border:"1px solid #eee",borderRadius:8,padding:"10px 12px",marginBottom:14}}>
           <div style={{display:"flex",gap:18,flexWrap:"wrap",fontSize:12}}>
-            <div><span style={{color:"#888"}}>Duration</span><strong style={{marginLeft:4}}>22–24 weeks</strong></div>
+            <div><span style={{color:"#888"}}>Duration</span><strong style={{marginLeft:4}}>22-24 weeks</strong></div>
             <div><span style={{color:"#888"}}>DLP</span><strong style={{marginLeft:4}}>12 months</strong></div>
             <div><span style={{color:"#888"}}>Payment</span><strong style={{marginLeft:4}}>30 · 60 · 10</strong></div>
           </div>
@@ -856,7 +1043,6 @@ function App(){
               <div style={{fontSize:10,color:O,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{p.w}</div>
               <div style={{fontSize:12.5,fontWeight:700,marginBottom:2}}>{p.t}</div>
               <div style={{fontSize:11.5,color:"#666",lineHeight:1.45}}>{p.d}</div>
-              <div style={{height:4,borderRadius:3,background:O,marginTop:5,width:Math.max((i+1)*22,12),maxWidth:180,opacity:0.45}}/>
             </div>
           ))}
         </div>
@@ -868,12 +1054,12 @@ function App(){
     );
   };
 
-  // ── PAGE: LAYOUT ───────────────────────────────────────────
+  // ── PAGE 6: LAYOUT ────────────────────────────────────────
   const Layout=()=>(
     <div style={{padding:"0 16px"}}>
       <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Basic project layout</h2>
-      <p style={{fontSize:11,color:"#888",marginBottom:12}}>Schematic flow · Detailed GA layout issued post-order within 2 weeks</p>
-      <div style={{background:"#f9f9f7",borderRadius:10,padding:12,overflowX:"auto",border:"1px solid #eee",marginBottom:10}}>
+      <p style={{fontSize:11,color:"#888",marginBottom:12}}>Schematic flow · GA layout issued post-order</p>
+      <div style={{background:"#f9f9f7",borderRadius:10,padding:12,overflowX:"auto",border:"1px solid #eee"}}>
         <svg viewBox="0 0 820 460" style={{minWidth:600,width:"100%"}}>
           <defs><marker id="ar" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill={O}/></marker></defs>
           <rect x="10" y="50" width="128" height="330" rx="6" fill="#fff" stroke={O} strokeWidth="1.2"/>
@@ -882,7 +1068,7 @@ function App(){
           {[["Dump Pit Hopper",90],["Drive-Over Grid",116],["Dust Aspiration",142],["Online Weigher",168]].map(([t2,y])=>(
             <g key={t2}><rect x="20" y={y} width="108" height="20" rx="3" fill="#f9f9f7" stroke="#eee" strokeWidth=".5"/><text x="74" y={y+13} textAnchor="middle" fontSize="8.5" fill="#333">{t2}</text></g>
           ))}
-          <text x="74" y="338" textAnchor="middle" fontSize="8.5" fill="#888">→ Drag Chain Conveyor</text>
+          <text x="74" y="338" textAnchor="middle" fontSize="8.5" fill="#888">Drag Chain Conveyor</text>
           <line x1="138" y1="195" x2="168" y2="195" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
           <rect x="168" y="50" width="138" height="330" rx="6" fill="#fff" stroke="#185FA5" strokeWidth="1.2"/>
           <rect x="168" y="50" width="138" height="26" rx="6" fill="#185FA5"/><rect x="168" y="64" width="138" height="12" fill="#185FA5"/>
@@ -896,7 +1082,6 @@ function App(){
           <text x="374" y="47" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">3. Elevator</text>
           {["Bucket Elevator","60 TPH","25m height"].map((t2,i)=><text key={t2} x="374" y={74+i*14} textAnchor="middle" fontSize="9" fill="#555">{t2}</text>)}
           <line x1="374" y1="115" x2="374" y2="385" stroke="#27500A" strokeWidth="1" strokeDasharray="5,3"/>
-          <text x="374" y="395" textAnchor="middle" fontSize="12" fill="#27500A">↑</text>
           <line x1="412" y1="63" x2="452" y2="63" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
           <text x="432" y="57" textAnchor="middle" fontSize="8" fill="#888">Distributor</text>
           <rect x="452" y="30" width="160" height="360" rx="6" fill="#fff" stroke="#C47E0E" strokeWidth="1.5"/>
@@ -908,14 +1093,14 @@ function App(){
           {[132,164,196,228,260].map(y=><line key={y} x1="474" y1={y} x2="590" y2={y} stroke="#eee" strokeWidth=".5"/>)}
           <path d="M474,276 L510,324 L554,324 L590,276 Z" fill="none" stroke="#C47E0E" strokeWidth=".8"/>
           <line x1="532" y1="324" x2="532" y2="350" stroke="#C47E0E" strokeWidth="1.2"/>
-          {[["GI sidewall sheets",112],["Aeration floor gratings",146],["Sweep auger (R/2)",180],["Temp monitoring cables",213],["Aeration fans",246],["Center draw-off gate",340]].map(([t2,y])=>(
+          {[["GI sidewall sheets",112],["Aeration floor",146],["Sweep auger (R/2)",180],["Temp monitoring",213],["Aeration fans",246],["Center gate",340]].map(([t2,y])=>(
             <text key={t2} x="532" y={y} textAnchor="middle" fontSize="8" fill="#666">{t2}</text>
           ))}
           <line x1="612" y1="312" x2="648" y2="312" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
           <rect x="648" y="50" width="158" height="330" rx="6" fill="#fff" stroke="#712B13" strokeWidth="1.2"/>
           <rect x="648" y="50" width="158" height="26" rx="6" fill="#712B13"/><rect x="648" y="64" width="158" height="12" fill="#712B13"/>
           <text x="727" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">5. Dispatch &amp; Control</text>
-          {[["Lower Reclaim Conveyor",90],["Belt Conveyor to loading",116],["Truck / Rail Loading",142]].map(([t2,y])=>(
+          {[["Reclaim Conveyor",90],["Belt Conveyor",116],["Truck Loading",142]].map(([t2,y])=>(
             <g key={t2}><rect x="658" y={y} width="138" height="20" rx="3" fill="#fff0ee" stroke="#f0d0c8" strokeWidth=".5"/><text x="727" y={y+13} textAnchor="middle" fontSize="8.5" fill="#333">{t2}</text></g>
           ))}
           {["MCC Panel","PLC / SCADA","Level sensors","Remote monitor"].map((t2,i)=>(
@@ -923,29 +1108,24 @@ function App(){
           ))}
           <rect x="10" y="408" width="800" height="44" rx="5" fill="#fff" stroke="#eee" strokeWidth=".5"/>
           <text x="20" y="425" fontSize="9" fontWeight="700" fill="#888">LEGEND:</text>
-          {[[O,"Intake & flow",75],["#185FA5","Cleaning",205],["#27500A","Elevating",292],[O,"Silo structure",372],["#712B13","Dispatch & control",462]].map(([c,l,x])=>(
+          {[[O,"Intake",75],["#185FA5","Cleaning",140],["#27500A","Elevating",214],[O,"Silo",285],["#712B13","Dispatch",350]].map(([c,l,x])=>(
             <g key={l}><rect x={x} y="417" width="10" height="8" rx="2" fill={c}/><text x={x+14} y="425" fontSize="8.5" fill="#555">{l}</text></g>
           ))}
-          <text x="20" y="443" fontSize="8" fill="#bbb">Schematic only. GA drawings with equipment footprints and foundation loads issued within 2 weeks of order.</text>
+          <text x="20" y="443" fontSize="8" fill="#bbb">Schematic only. GA drawings with equipment footprints issued within 2 weeks of order.</text>
         </svg>
       </div>
     </div>
   );
 
-  // ── PAGE: TERMS ────────────────────────────────────────────
+  // ── PAGE 7: TERMS ─────────────────────────────────────────
   const TermsPage=()=>{
-    const defs=[
-      {key:"commercial",title:"Commercial terms",color:O},
-      {key:"warranty",title:"Delivery & warranty",color:O},
-      {key:"exclusions",title:"Exclusions — not in scope",color:"#E24B4A"},
-      {key:"legal",title:"Legal & jurisdiction",color:DK},
-    ];
+    const defs=[{key:"commercial",title:"Commercial terms",color:O},{key:"warranty",title:"Delivery & warranty",color:O},{key:"exclusions",title:"Exclusions — not in scope",color:"#E24B4A"},{key:"legal",title:"Legal & jurisdiction",color:DK}];
     const pfx={commercial:"",warranty:"",exclusions:"E",legal:"L"};
     const ctr={commercial:0,warranty:0,exclusions:0,legal:0};
     return(
       <div style={{padding:"0 16px"}}>
         <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Terms, conditions & exclusions</h2>
-        <p style={{fontSize:11,color:"#888",marginBottom:12}}>✎ edit any clause · + add new · ✕ remove · All changes appear in PDF export</p>
+        <p style={{fontSize:11,color:"#888",marginBottom:12}}>✎ edit · + add · ✕ remove any clause — changes reflect in PDF</p>
         {defs.map(({key,title,color})=>{
           const px=pfx[key];
           return(
@@ -954,23 +1134,20 @@ function App(){
                 <div style={{fontSize:11,fontWeight:700,color,textTransform:"uppercase",letterSpacing:"0.05em"}}>{title}</div>
                 <Btn ch="+ Add clause" onClick={()=>setTermModal({section:key,idx:-1,text:""})} small/>
               </div>
-              <div style={{padding:"4px 0"}}>
-                {terms[key].map((item,i)=>{
-                  ctr[key]++;
-                  const num=px?`${px}${ctr[key]}`:ctr[key];
-                  return(
-                    <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}>
-                      <span style={{fontSize:10,fontWeight:700,color,minWidth:22,marginTop:2,flexShrink:0}}>{num}.</span>
-                      <span style={{flex:1,fontSize:12,lineHeight:1.6}}>{item}</span>
-                      <div style={{display:"flex",gap:4,flexShrink:0}}>
-                        <button onClick={()=>setTermModal({section:key,idx:i,text:item})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer"}}>✎</button>
-                        <button onClick={()=>delTerm(key,i)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>✕</button>
-                      </div>
+              {terms[key].map((item,i)=>{
+                ctr[key]++;const num=px?`${px}${ctr[key]}`:ctr[key];
+                return(
+                  <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",padding:"6px 12px",borderBottom:"1px solid #f5f5f5"}}>
+                    <span style={{fontSize:10,fontWeight:700,color,minWidth:22,marginTop:2,flexShrink:0}}>{num}.</span>
+                    <span style={{flex:1,fontSize:12,lineHeight:1.6}}>{item}</span>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <button onClick={()=>setTermModal({section:key,idx:i,text:item})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer"}}>✎</button>
+                      <button onClick={()=>delTerm(key,i)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 6px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>✕</button>
                     </div>
-                  );
-                })}
-                {terms[key].length===0&&<div style={{padding:"14px",textAlign:"center",color:"#aaa",fontSize:12}}>No clauses. Click "+ Add clause" to add.</div>}
-              </div>
+                  </div>
+                );
+              })}
+              {terms[key].length===0&&<div style={{padding:"14px",textAlign:"center",color:"#aaa",fontSize:12}}>No clauses. Click + Add clause.</div>}
             </div>
           );
         })}
@@ -978,11 +1155,11 @@ function App(){
     );
   };
 
-  // ── PAGE: REFERENCES ───────────────────────────────────────
+  // ── PAGE 8: REFERENCES ────────────────────────────────────
   const References=()=>(
     <div style={{padding:"0 16px"}}>
       <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Reference list</h2>
-      <p style={{fontSize:11,color:"#888",marginBottom:12}}>Completed projects across India · Site visits with 5 working days notice</p>
+      <p style={{fontSize:11,color:"#888",marginBottom:12}}>7 completed projects · Site visits on request</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
         {[["50+","Projects"],["7","States"],["2.5L+ MT","Storage"],["100%","Turnkey"]].map(([v,l])=>(
           <div key={l} style={{background:"#fff",borderRadius:8,padding:"12px 8px",textAlign:"center",border:"1px solid #eee",borderTop:`3px solid ${O}`}}>
@@ -992,13 +1169,13 @@ function App(){
         ))}
       </div>
       {[
-        {s:"Punjab",c:"Lakshmi Rice Mills Pvt. Ltd.",p:"2 × 5,000 MT paddy silos with cleaning tower & aeration — full turnkey",y:"2022"},
-        {s:"Haryana",c:"Haryana Warehousing Corporation",p:"1 × 10,000 MT wheat flat-bottom silo + cleaning line + PLC automation",y:"2021"},
-        {s:"West Bengal",c:"Bengal Flour Mills Ltd.",p:"3 × 3,000 MT wheat silos with aeration, monitoring & dispatch conveyor",y:"2023"},
-        {s:"Chhattisgarh",c:"Chhattisgarh Distillery Pvt. Ltd.",p:"Maize intake & conditioning + 2 × 5,000 MT storage silos",y:"2022"},
-        {s:"Orissa",c:"Odisha State Civil Supplies Corp.",p:"5,000 MT rice flat-bottom silo complex with MCC & remote monitoring",y:"2020"},
-        {s:"Rajasthan",c:"Rajasthan Oil & Grain Industries",p:"Mustard seed 2 × 3,000 MT hopper silos with aeration",y:"2023"},
-        {s:"Punjab (Beas)",c:"Beas Agro Processing Unit",p:"Intake cleaning tower + 3 silos + sweep augers + full automation",y:"2024"},
+        {s:"Punjab",c:"Lakshmi Rice Mills Pvt. Ltd.",p:"2x5000 MT paddy silos with cleaning tower & aeration — full turnkey",y:"2022"},
+        {s:"Haryana",c:"Haryana Warehousing Corporation",p:"1x10000 MT wheat silo + cleaning line + PLC automation",y:"2021"},
+        {s:"West Bengal",c:"Bengal Flour Mills Ltd.",p:"3x3000 MT wheat silos with aeration, monitoring & dispatch",y:"2023"},
+        {s:"Chhattisgarh",c:"Chhattisgarh Distillery Pvt. Ltd.",p:"Maize intake + 2x5000 MT storage silos",y:"2022"},
+        {s:"Orissa",c:"Odisha State Civil Supplies Corp.",p:"5000 MT rice flat-bottom silo complex with MCC & monitoring",y:"2020"},
+        {s:"Rajasthan",c:"Rajasthan Oil & Grain Industries",p:"2x3000 MT mustard hopper silos with aeration",y:"2023"},
+        {s:"Punjab (Beas)",c:"Beas Agro Processing Unit",p:"Intake + 3 silos + sweep augers + full automation — turnkey",y:"2024"},
       ].map(r=>(
         <div key={r.c} style={{display:"flex",gap:10,padding:"9px 12px",border:"1px solid #eee",borderLeft:`3px solid ${O}`,borderRadius:8,marginBottom:8,background:"#fff",alignItems:"flex-start"}}>
           <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:700,marginBottom:2}}>{r.c}</div><div style={{fontSize:11.5,color:"#666"}}>{r.p}</div></div>
@@ -1011,64 +1188,74 @@ function App(){
     </div>
   );
 
-  // ── PAGE: THANK YOU ────────────────────────────────────────
-  const ThankYou=()=>(
+  // ── PAGE 9: CLOSING (editable) ────────────────────────────
+  const Closing=()=>(
     <div style={{padding:"0 16px"}}>
-      <div style={{textAlign:"center",padding:"24px 12px 20px"}}>
-        <div style={{width:64,height:64,background:O,borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,fontWeight:700,color:"#fff",margin:"0 auto 16px"}}>BS</div>
-        <h2 style={{fontSize:22,fontWeight:700,marginBottom:8}}>Thank you, {client.name||"Valued Partner"}!</h2>
-        <p style={{fontSize:13,color:"#555",lineHeight:1.8,maxWidth:500,margin:"0 auto 14px"}}>We sincerely appreciate your interest in Brag Systems and the confidence placed in us for the project at <strong>{client.company||"your organisation"}</strong>. We are ready to build something exceptional — together.</p>
-        <p style={{fontSize:17,color:O,fontWeight:700,marginBottom:22}}>"Let's Build It Better!"</p>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,maxWidth:500,margin:"0 auto 18px"}}>
-          {[["👤","Abhinav Sharma","Founder & Director"],["✉️","info@bragsystems.com","Email us"],["📍","Eco Tower, IMT Manesar","Gurugram, Haryana"]].map(([ic,m,s])=>(
-            <div key={m} style={{background:"#f9f9f7",borderRadius:8,padding:"12px 8px",border:"1px solid #eee"}}>
-              <div style={{fontSize:20,marginBottom:5}}>{ic}</div>
-              <div style={{fontSize:11,fontWeight:700}}>{m}</div>
-              <div style={{fontSize:10,color:"#888",marginTop:2}}>{s}</div>
+      {/* Preview */}
+      <div style={{background:"#fff",border:"1px solid #eee",borderRadius:10,overflow:"hidden",marginBottom:16}}>
+        <div style={{background:O,padding:"8px 14px"}}>
+          <span style={{fontSize:12,fontWeight:700,color:"#fff"}}>Brag Systems — Quote {quote.num}</span>
+        </div>
+        <div style={{padding:"16px"}}>
+          <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{closing.thankYouTitle}</div>
+          <div style={{fontSize:13,color:O,fontStyle:"italic",marginBottom:12}}>"Let's Build It Better!"</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div style={{background:"#1A1A1A",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:10,color:"#9E9890",marginBottom:4,textTransform:"uppercase"}}>Supply (EXW + P&F + GST)</div>
+              <div style={{fontSize:14,fontWeight:700,color:O}}>{fmt(t.sub+t.tax)}</div>
             </div>
-          ))}
+            <div style={{background:"#f9f9f7",border:"1px solid #eee",borderRadius:8,padding:"10px 12px"}}>
+              <div style={{fontSize:10,color:"#888",marginBottom:4,textTransform:"uppercase"}}>Installation / Service</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#555"}}>{fmt(t.inst)}</div>
+            </div>
+          </div>
+          <div style={{background:O,borderRadius:8,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#fff"}}>TOTAL PROJECT COST</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>{fmt(t.total)}</div>
+          </div>
         </div>
-        <div style={{background:"#f9f9f7",borderRadius:10,padding:"14px 18px",textAlign:"left",maxWidth:520,margin:"0 auto 16px",border:"1px solid #eee"}}>
-          <div style={{fontSize:12,fontWeight:700,marginBottom:10}}>Quote summary</div>
-          {[["Quote",quote.num],["Project",client.project||"—"],["Incoterm",incoterm.toUpperCase()],["Date",quote.date],["Valid",quote.validity+" days"]].map(([l,v])=>(
-            <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",borderBottom:"1px solid #eee"}}><span style={{color:"#888"}}>{l}</span><span style={{fontWeight:600}}>{v}</span></div>
-          ))}
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:15,padding:"8px 0 2px",fontWeight:700,color:O}}><span>Total project cost</span><span>{fmt(t.total)}</span></div>
-        </div>
-        <div style={{borderTop:"1px solid #eee",paddingTop:18,maxWidth:380,margin:"0 auto",textAlign:"center"}}>
-          <p style={{fontSize:11,color:"#aaa",marginBottom:34}}>For and on behalf of Brag Systems</p>
-          <div style={{width:200,borderTop:"1px solid #555",margin:"0 auto 8px"}}/>
-          <p style={{fontSize:13,fontWeight:700}}>Abhinav Sharma</p>
-          <p style={{fontSize:12,color:"#888"}}>Founder & Director · Brag Systems</p>
-          <p style={{fontSize:11,color:"#aaa",marginTop:2}}>Date: {quote.date} · Quote: {quote.num}</p>
-        </div>
-        <div style={{marginTop:22,display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-          <Btn ch="📄 Download PDF" onClick={()=>genPDF(client,quote,sections,pf,freight,tax,incoterm,terms)}/>
-          <Btn ch={saving?"☁ Saving...":"☁ Save to cloud"} onClick={saveQuote} outline disabled={saving}/>
-          <Btn ch="↺ New quote" onClick={()=>{setSections(JSON.parse(JSON.stringify(DEF_SECTIONS)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DEF_TERMS)));setQuote({num:"BS-2025-"+(Date.now()%10000),date:today,validity:"90"});setPage(0);showT("New quote ready");}} outline/>
-        </div>
+      </div>
+
+      <h3 style={{fontSize:13,fontWeight:700,marginBottom:10,color:"#333"}}>Closing page content <span style={{fontSize:10,color:"#888",fontWeight:400}}>— editable, appears in PDF</span></h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:8}}>
+        <SF label="Page title / thank you heading" val={closing.thankYouTitle} fn={v=>setClosing(c=>({...c,thankYouTitle:v}))} ph="Thank You for Your Confidence"/>
+        <SF label="Closing message / thank you body" val={closing.thankYouBody} fn={v=>setClosing(c=>({...c,thankYouBody:v}))} rows={3} ph="We sincerely appreciate the opportunity..."/>
+        <SF label="Next steps (one per line)" val={closing.nextSteps} fn={v=>setClosing(c=>({...c,nextSteps:v}))} rows={4} ph="1. Review this quotation..."/>
+        <SF label="Sign-off / authorised signatory block" val={closing.signOff} fn={v=>setClosing(c=>({...c,signOff:v}))} rows={3} ph="Abhinav Sharma\nFounder & Director..."/>
+        <SF label="Footer line (all pages)" val={closing.footerLine} fn={v=>setClosing(c=>({...c,footerLine:v}))} ph="www.bragsystems.com | info@bragsystems.com"/>
+      </div>
+      <div style={{display:"flex",gap:8,marginTop:12,justifyContent:"center",flexWrap:"wrap"}}>
+        <Btn ch="📄 Download PDF" onClick={()=>genPDF(client,quote,sections,pf,freight,tax,incoterm,terms,cover,closing)}/>
+        <Btn ch={saving?"Saving...":"☁ Save to cloud"} onClick={saveQuote} outline disabled={saving}/>
+        <Btn ch="↺ New quote" onClick={()=>{setSections(JSON.parse(JSON.stringify(DEF_SECTIONS)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DEF_TERMS)));setCover({...DEF_COVER});setClosing({...DEF_CLOSING});setQuote({num:"BS-"+Date.now().toString().slice(-5),date:today,validity:"90"});setPage(0);showT("New quote ready");}} outline/>
       </div>
     </div>
   );
 
-  // ── MODALS ─────────────────────────────────────────────────
+  // ── MODALS ────────────────────────────────────────────────
   const ItemModal=()=>{
-    const[item,setItem]=useState({...(itemModal.item||{desc:"",qty:1,unit:"Nos",exw:0,install:0})});
+    const[item,setItem]=useState({desc:"",qty:1,unit:"Nos",unitPrice:0,install:0,specs:"",...(itemModal.item||{})});
     return(
-      <Modal title={itemModal.ii>=0?"Edit item":"Add item"} onClose={()=>setItemModal(null)}>
+      <Modal title={itemModal.ii>=0?"Edit item":"Add item"} onClose={()=>setItemModal(null)} wide>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <F label="Description" val={item.desc} fn={v=>setItem(i=>({...i,desc:v}))} ph="e.g. Bucket Elevator (60 TPH, 25m height)"/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
             <F label="Quantity" val={item.qty} fn={v=>setItem(i=>({...i,qty:+v}))} type="number"/>
-            <F label="Unit" val={item.unit} fn={v=>setItem(i=>({...i,unit:v}))} ph="Nos / Set / Lot"/>
+            <F label="Unit" val={item.unit} fn={v=>setItem(i=>({...i,unit:v}))} ph="Nos / Set / Lot / m"/>
+            <F label="Unit price — supply (Rs.)" val={item.unitPrice||0} fn={v=>setItem(i=>({...i,unitPrice:+v}))} type="number"/>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            <F label="Ex-works price per unit (₹)" val={item.exw} fn={v=>setItem(i=>({...i,exw:+v}))} type="number"/>
-            <F label="Installation cost (₹)" val={item.install||0} fn={v=>setItem(i=>({...i,install:+v}))} type="number"/>
+            <F label="Installation / service cost (Rs.)" val={item.install||0} fn={v=>setItem(i=>({...i,install:+v}))} type="number"/>
+            <div style={{background:"#f9f9f7",borderRadius:6,padding:"8px 10px",fontSize:12,display:"flex",flexDirection:"column",gap:3}}>
+              <span style={{fontSize:10,color:"#888",fontWeight:600,textTransform:"uppercase"}}>EXW total</span>
+              <span style={{fontWeight:700,color:O,fontSize:14}}>{fmt((item.qty||0)*(item.unitPrice||0))}</span>
+            </div>
           </div>
-          <div style={{background:"#f9f9f7",borderRadius:6,padding:"8px 10px",fontSize:12}}>
-            <span style={{color:"#888"}}>Line EXW total: </span><strong style={{color:O}}>{fmt((item.qty||0)*(item.exw||0))}</strong>
-            <span style={{color:"#888",marginLeft:12}}>Install: </span><strong>{fmt(item.install||0)}</strong>
+          <F label="Technical specifications (appears below item in PDF)" val={item.specs||""} fn={v=>setItem(i=>({...i,specs:v}))} ph="e.g. 60 TPH capacity, 15 kW motor, MS construction, SKF bearings..." rows={3}/>
+          <div style={{background:"#f9f9f7",borderRadius:6,padding:"8px 10px",fontSize:11.5,display:"flex",gap:16"}}>
+            <span>Supply EXW: <strong style={{color:O}}>{fmt((item.qty||0)*(item.unitPrice||0))}</strong></span>
+            <span style={{marginLeft:12}}>Installation: <strong>{fmt(item.install||0)}</strong></span>
+            <span style={{marginLeft:12}}>Total incl. install: <strong>{fmt((item.qty||0)*(item.unitPrice||0)+(item.install||0))}</strong></span>
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             <Btn ch="Cancel" onClick={()=>setItemModal(null)} outline/>
@@ -1084,10 +1271,10 @@ function App(){
     return(
       <Modal title={termModal.idx>=0?"Edit clause":"Add clause"} onClose={()=>setTermModal(null)}>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          <F label="Clause text" val={text} fn={setText} ph="Enter the clause text..." rows={4}/>
+          <F label="Clause text" val={text} fn={setText} rows={4} ph="Enter clause text..."/>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             <Btn ch="Cancel" onClick={()=>setTermModal(null)} outline/>
-            <Btn ch="Save clause" onClick={()=>{if(text.trim())saveTerm(termModal.section,termModal.idx,text);else showT("Clause cannot be empty");}}/>
+            <Btn ch="Save" onClick={()=>{if(text.trim())saveTerm(termModal.section,termModal.idx,text);else showT("Cannot save empty clause");}}/>
           </div>
         </div>
       </Modal>
@@ -1097,12 +1284,12 @@ function App(){
   const SecModal=()=>{
     const[name,setName]=useState("");
     return(
-      <Modal title="Add new section" onClose={()=>setSecModal(null)}>
+      <Modal title="Add section" onClose={()=>setSecModal(null)}>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <F label="Section name" val={name} fn={setName} ph="e.g. Special Equipment / Weighbridge / Grain Dryer"/>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
             <Btn ch="Cancel" onClick={()=>setSecModal(null)} outline/>
-            <Btn ch="Add section" onClick={()=>{if(name.trim()){setSections(p=>[...p,{id:p.length+1,name,open:true,items:[]}]);setSecModal(null);showT("Section added");}else showT("Enter a section name");}}/>
+            <Btn ch="Add" onClick={()=>{if(name.trim()){setSections(p=>[...p,{id:p.length+1,name,open:true,items:[]}]);setSecModal(null);showT("Section added");}}}/>
           </div>
         </div>
       </Modal>
@@ -1111,29 +1298,16 @@ function App(){
 
   const SavedModal=()=>(
     <Modal title={`Saved quotes (${savedList.length})`} onClose={()=>setShowSaved(false)}>
-      {!sb&&(
-        <div style={{background:"#FFF3CD",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#856404"}}>
-          ⚠ Supabase not configured. <button onClick={()=>{setShowSaved(false);setConfigModal(true);}} style={{color:O,fontWeight:700,background:"none",border:"none",cursor:"pointer"}}>Configure now →</button>
-        </div>
-      )}
-      {loading&&<div style={{textAlign:"center",padding:"20px",color:"#888",fontSize:12}}>Loading...</div>}
-      {!loading&&savedList.length===0&&<p style={{textAlign:"center",padding:"20px",color:"#aaa",fontSize:12}}>No saved quotes found.</p>}
+      {!sbConn&&<div style={{background:"#FFF3CD",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#856404"}}>Supabase not configured. <button onClick={()=>{setShowSaved(false);setConfigModal(true);}} style={{color:O,fontWeight:700,background:"none",border:"none",cursor:"pointer"}}>Configure →</button></div>}
+      {savedList.length===0&&<p style={{textAlign:"center",padding:"20px",color:"#aaa",fontSize:12}}>No saved quotes.</p>}
       {savedList.map(q=>(
         <div key={q.id} style={{border:"1px solid #eee",borderRadius:8,padding:"10px 12px",marginBottom:8,background:"#f9f9f7"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
-              <div style={{fontSize:12.5,fontWeight:700}}>{q.quote_num}</div>
-              <div style={{fontSize:11,color:"#888",marginTop:1}}>{q.client_company||"—"}</div>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:12,fontWeight:700,color:O}}>{fmt(q.total)}</div>
-              <div style={{fontSize:10,color:"#aaa",marginTop:1}}>{q.created_at?.split("T")[0]}</div>
-            </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <div><div style={{fontSize:12.5,fontWeight:700}}>{q.quote_num}</div><div style={{fontSize:11,color:"#888"}}>{q.client_company||"—"}</div></div>
+            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:O}}>{fmt(q.total)}</div><div style={{fontSize:10,color:"#aaa"}}>{q.created_at?.split("T")[0]}</div></div>
           </div>
-          <div style={{display:"flex",gap:6,alignItems:"center",marginTop:8,flexWrap:"wrap"}}>
-            <StatusBadge s={q.status||"draft"}/>
-            <select value={q.status||"draft"} onChange={e=>updateStatus(q.id,e.target.value)}
-              style={{fontSize:10,padding:"2px 5px",border:"1px solid #ddd",borderRadius:5,background:"#fff",cursor:"pointer"}}>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={q.status||"draft"} onChange={e=>updateStatus(q.id,e.target.value)} style={{fontSize:10,padding:"2px 5px",border:"1px solid #ddd",borderRadius:5,background:"#fff",cursor:"pointer"}}>
               {["draft","sent","accepted","rejected"].map(s=><option key={s} value={s}>{s}</option>)}
             </select>
             <div style={{display:"flex",gap:5,marginLeft:"auto"}}>
@@ -1147,85 +1321,56 @@ function App(){
   );
 
   const ConfigModal=()=>{
-    const[url,setUrl]=useState(tempUrl);
-    const[key2,setKey]=useState(tempKey);
+    const[url,setUrl]=useState(SUPA_URL);
+    const[key2,setKey]=useState(SUPA_KEY);
     const[testing,setTesting]=useState(false);
-    const[testResult,setTestResult]=useState("");
-
-    async function testConn(){
-      setTesting(true);setTestResult("");
+    const[res,setRes]=useState("");
+    async function test(){
+      setTesting(true);setRes("");
       try{
         const testSb=window.supabase.createClient(url,key2);
-        const{data,error}=await testSb.from("quotes").select("id").limit(1);
-        if(error)setTestResult("❌ Error: "+error.message);
-        else{setTestResult("✓ Connected! Found the quotes table.");setTimeout(()=>{sb=testSb;setDbStatus("connected");showT("Supabase connected!");setConfigModal(false);loadSavedQuotes();},1000);}
-      }catch(e){setTestResult("❌ Failed: "+e.message);}
+        const{error}=await testSb.from("quotes").select("id").limit(1);
+        if(error)setRes("Error: "+error.message);
+        else{setRes("Connected! quotes table found.");setTimeout(()=>{sb=testSb;setSbConn(true);setConfigModal(false);loadSaved();showT("Supabase connected!");},800);}
+      }catch(e){setRes("Failed: "+e.message);}
       setTesting(false);
     }
-
     return(
-      <Modal title="Configure Supabase connection" onClose={()=>setConfigModal(false)}>
-        <div style={{background:"#EAF3DE",borderRadius:6,padding:"10px 12px",marginBottom:14,fontSize:12,color:"#27500A"}}>
-          <strong>Setup steps:</strong><br/>
-          1. Go to <a href="https://supabase.com" target="_blank" style={{color:O}}>supabase.com</a> → create a project<br/>
-          2. Run the SQL in the comment block at the top of index.html to create the quotes table<br/>
-          3. Copy your Project URL and anon/public key from Settings → API<br/>
-          4. Paste below and click Test
+      <Modal title="Configure Supabase" onClose={()=>setConfigModal(false)}>
+        <div style={{background:"#EAF3DE",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#27500A"}}>
+          Use the <strong>same Supabase project</strong> as your invoice app. Just copy the Project URL and anon key from Settings → API. Run the SQL table setup once if not done.
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
-          <F label="Supabase project URL" val={url} fn={setUrl} ph="https://your-project.supabase.co"/>
-          <F label="Supabase anon / public key" val={key2} fn={setKey} ph="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."/>
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}>
+          <F label="Project URL" val={url} fn={setUrl} ph="https://xxx.supabase.co"/>
+          <F label="Anon / public key" val={key2} fn={setKey} ph="eyJ..."/>
         </div>
-        {testResult&&<div style={{padding:"8px 12px",borderRadius:6,background:testResult.startsWith("✓")?"#EAF3DE":"#FCEBEB",color:testResult.startsWith("✓")?"#27500A":"#791F1F",fontSize:12,marginBottom:10}}>{testResult}</div>}
+        {res&&<div style={{padding:"8px 12px",borderRadius:6,background:res.includes("Connected")?"#EAF3DE":"#FCEBEB",color:res.includes("Connected")?"#27500A":"#791F1F",fontSize:12,marginBottom:10}}>{res}</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <Btn ch="Cancel" onClick={()=>setConfigModal(false)} outline/>
-          <Btn ch={testing?"Testing...":"Test & connect"} onClick={testConn} disabled={testing}/>
+          <Btn ch={testing?"Testing...":"Test & connect"} onClick={test} disabled={testing}/>
         </div>
-        <div style={{marginTop:14,padding:"10px 12px",background:"#f9f9f7",borderRadius:6,fontSize:11,color:"#888"}}>
-          <strong>Permanent setup:</strong> Edit SUPA_URL and SUPA_KEY at the top of index.html, push to GitHub. Vercel will redeploy automatically.
+        <div style={{marginTop:12,padding:"8px 12px",background:"#f9f9f7",borderRadius:6,fontSize:11,color:"#777"}}>
+          For permanent setup: edit SUPA_URL and SUPA_KEY at top of index.html and push to GitHub.
         </div>
       </Modal>
     );
   };
 
-  const PCs=[Index,Cover,Equipment,Pricing,TechSheets,Timeline,Layout,TermsPage,References,ThankYou];
+  const PCs=[Index,Cover,Equipment,Pricing,TechSheets,Timeline,Layout,TermsPage,References,Closing];
   const PC=PCs[page];
 
   return(
     <div style={{minHeight:"100vh",background:"#f5f5f3"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 16px",background:"#fff",borderBottom:"1px solid #eee",position:"sticky",top:0,zIndex:50,flexWrap:"wrap",gap:5}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:30,height:30,background:O,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>BS</div>
-          <div><div style={{fontSize:13,fontWeight:700,color:DK,lineHeight:1.1}}>Brag Systems</div><div style={{fontSize:9.5,color:"#aaa"}}>Quote Builder · Let's Build It Better!</div></div>
-        </div>
-        <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-          {PAGES.map((p,i)=>(
-            <button key={i} onClick={()=>setPage(i)} style={{fontSize:10,padding:"3px 8px",borderRadius:5,cursor:"pointer",border:"none",background:page===i?O:"transparent",color:page===i?"#fff":"#888",fontWeight:page===i?700:400}}>
-              {i===0?"⊞":i}
-            </button>
-          ))}
-        </div>
-        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-          <button onClick={()=>setPage(p=>Math.max(0,p-1))} style={{padding:"4px 10px",border:"1px solid #ddd",borderRadius:6,background:"#fff",cursor:"pointer",fontSize:12}}>←</button>
-          <button onClick={()=>setPage(p=>Math.min(9,p+1))} style={{padding:"4px 10px",border:"1px solid #ddd",borderRadius:6,background:"#fff",cursor:"pointer",fontSize:12}}>→</button>
-          <Btn ch="📄 PDF" onClick={()=>genPDF(client,quote,sections,pf,freight,tax,incoterm,terms)} small/>
-          <Btn ch={saving?"Saving...":"☁"} onClick={saveQuote} small outline disabled={saving}/>
-          <Btn ch="📂" onClick={()=>{loadSavedQuotes();setShowSaved(true);}} small outline/>
-          <button onClick={()=>setConfigModal(true)} style={{padding:"4px 10px",border:`1px solid ${sb?"#4CAF50":"#E24B4A"}`,borderRadius:6,background:"#fff",cursor:"pointer",fontSize:11,color:sb?"#4CAF50":"#E24B4A",fontWeight:600}}>{sb?"DB ✓":"DB ⚠"}</button>
-        </div>
-      </div>
-
+      <Nav/>
       <div style={{paddingBottom:72}}><PC/></div>
-
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderTop:"1px solid #eee",background:"#fff",position:"fixed",bottom:0,left:0,right:0,zIndex:40}}>
+      <div className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderTop:"1px solid #eee",background:"#fff",position:"fixed",bottom:0,left:0,right:0,zIndex:40}}>
         <button onClick={()=>setPage(p=>Math.max(0,p-1))} disabled={page===0} style={{padding:"6px 14px",border:"1px solid #ddd",borderRadius:7,background:"#fff",cursor:"pointer",fontSize:12,opacity:page===0?0.4:1}}>← {page>0?PAGES[page-1]:"Start"}</button>
         <div style={{textAlign:"center"}}>
           <div style={{fontSize:12,fontWeight:700}}>{PAGES[page]}</div>
-          <div style={{fontSize:10,color:"#aaa"}}>{page+1} of {PAGES.length}</div>
+          <div style={{fontSize:10,color:"#aaa"}}>{page+1} / {PAGES.length}</div>
         </div>
         <button onClick={()=>setPage(p=>Math.min(9,p+1))} disabled={page===9} style={{padding:"6px 14px",border:"none",borderRadius:7,background:O,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12,opacity:page===9?0.4:1}}>{page<9?PAGES[page+1]:"Done"} →</button>
       </div>
-
       {itemModal&&<ItemModal/>}
       {termModal&&<TermModal/>}
       {secModal&&<SecModal/>}
