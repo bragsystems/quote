@@ -282,7 +282,7 @@ function genPDF(client,quote,sections,pf,freight,tax,incoterm,terms,cover,closin
     doc.setTextColor(or,og,ob);doc.setFontSize(7);doc.setFont("helvetica","bold");doc.text("PREPARED FOR",M+6,y+6,{charSpace:0.5});
     doc.setTextColor(26,26,26);doc.setFontSize(13);doc.setFont("helvetica","bold");doc.text(client.company,M+6,y+14);
     doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(80,80,80);
-    doc.text(`${client.name||""}${client.city?`  |  ${client.city}`:""}`,M+6,y+21);
+    doc.text((client.name||"")+(client.city?" | "+client.city:""),M+6,y+21);
     if(client.project){doc.setTextColor(or,og,ob);doc.setFontSize(9);doc.text(client.project,M+6,y+28);}
     y+=client.project?38:32;
   }
@@ -1252,7 +1252,7 @@ function App(){
             </div>
           </div>
           <F label="Technical specifications (appears below item in PDF)" val={item.specs||""} fn={v=>setItem(i=>({...i,specs:v}))} ph="e.g. 60 TPH capacity, 15 kW motor, MS construction, SKF bearings..." rows={3}/>
-          <div style={{background:"#f9f9f7",borderRadius:6,padding:"8px 10px",fontSize:11.5,display:"flex",gap:16"}}>
+          <div style={{background:"#f9f9f7",borderRadius:6,padding:"8px 10px",fontSize:11.5,display:"flex",gap:16}}>
             <span>Supply EXW: <strong style={{color:O}}>{fmt((item.qty||0)*(item.unitPrice||0))}</strong></span>
             <span style={{marginLeft:12}}>Installation: <strong>{fmt(item.install||0)}</strong></span>
             <span style={{marginLeft:12}}>Total incl. install: <strong>{fmt((item.qty||0)*(item.unitPrice||0)+(item.install||0))}</strong></span>
