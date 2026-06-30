@@ -31,6 +31,14 @@ const SUPA_URL="https://YOUR_PROJECT_REF.supabase.co";
 const SUPA_KEY="YOUR_ANON_PUBLIC_KEY";
 let sb=null;
 try{if(!SUPA_URL.includes("YOUR_PROJECT"))sb=window.supabase.createClient(SUPA_URL,SUPA_KEY);}catch(e){}
+// Persisted connection: if the user previously connected via "Configure Supabase", reuse those
+// credentials on every future page load instead of asking to reconnect each session.
+try{
+  if(!sb){
+    const saved=localStorage.getItem("bs_supabase_cfg");
+    if(saved){const cfg=JSON.parse(saved);if(cfg.url&&cfg.key)sb=window.supabase.createClient(cfg.url,cfg.key);}
+  }
+}catch(e){}
 const O="#E59215",DK="#1A1A1A";
 const fmt=n=>"Rs. "+Math.round(n||0).toLocaleString("en-IN");
 const today=new Date().toISOString().split("T")[0];
@@ -118,6 +126,42 @@ const DC={headerLine:"Brag Systems — India's Grain Storage Execution Partner",
 
 const DCL={thankYouTitle:"Thank You for Your Confidence",thankYouBody:"We sincerely appreciate the opportunity to quote for your grain storage project. Brag Systems is committed to delivering this project on time, on budget, and to specification.",nextSteps:"Review this quotation with your team and share any queries\nArrange a site visit to a reference installation if required\nShare scope changes for a revised quotation\nPlace order with 30% advance to commence engineering",signOff:"For and on behalf of Brag Systems\n\nAbhinav Sharma\nFounder & Director",footerLine:"www.bragsystems.com  |  info@bragsystems.com  |  +91 XXXXX XXXXX  |  Eco Tower, IMT Manesar, Gurugram"};
 
+const DSH=[
+  {name:"Bucket Elevator",model:"BE-60-25",specs:[["Capacity","60 TPH"],["Head height","25 m"],["Motor","15 kW"],["Construction","MS Hot-Dip Galvanized"],["Belt","EP-315/3 Rubber 400mm"],["Speed","1.8 m/s"],["Bearings","SKF / FAG sealed"],["Finish","Epoxy + PU topcoat"]]},
+  {name:"Flat Bed Vibratory Screen",model:"VFS-60",specs:[["Capacity","60 TPH"],["Decks","3-deck MS perforated"],["Mesh","Top 8mm/Mid 3mm/Bottom 1.5mm"],["Drive","Eccentric flywheel 960 RPM"],["Motor","7.5 kW TEFC"],["Outlets","3 fractions + tailings"]]},
+  {name:"PLC Control System",model:"Siemens S7-1200",specs:[["I/O","64DI/48DO/16AI/8AO"],["HMI","15 inch Colour Touchscreen"],["Comms","Profinet / Ethernet-IP"],["Protocol","Modbus TCP OPC-UA"],["Enclosure","IP54 MS panel"],["Backup","UPS 30 min battery"]]},
+  {name:"Centrifugal Aeration Fan",model:"CAF-7.5",specs:[["Flow","18000 m3/hr per fan"],["Static P","250 Pa"],["Motor","7.5 kW IE3"],["Speed","960 RPM"],["Impeller","Backward curved GI"],["Outlet","400mm flanged"]]},
+  {name:"Grain Monitoring System",model:"OPI-GMS-8",specs:[["Cables","8 temp/moisture cables"],["Sensors","12 per cable at 1.5m"],["Temp","-20 to +70 deg C"],["MC","10-30%"],["Accuracy","+/-0.3C / +/-0.5% MC"],["Interface","Web + mobile app"]]},
+  {name:"Sweep Auger with Tractor Drive",model:"SAU-D/2",specs:[["Reach","Exactly R/2 (half silo dia)"],["Auger","6 inch 150mm pitch MS"],["Tractor","4 PU wheels 1.5 kW motor"],["Revolution","2 RPM"],["Drive","3 kW centre gearbox"],["Finish","Hot-dip galvanized"]]},
+];
+
+const DPH=[
+  {w:"Week 1-2",t:"Order Finalisation & Kickoff",d:"Contract signing, 30% advance, site survey, drawing approval kickoff"},
+  {w:"Week 3-4",t:"Engineering & Drawing Approval",d:"GA, foundation, SLD submitted for client approval within 10 working days"},
+  {w:"Week 5-8",t:"Civil & Foundation Work",d:"Silo foundation, plinths, pit — client scope, supervised by Brag Systems"},
+  {w:"Week 7-12",t:"Equipment Manufacturing & FAT",d:"Fabrication + Factory Acceptance Testing before dispatch"},
+  {w:"Week 12-14",t:"Dispatch & Site Delivery",d:"Progressive dispatch with site receipt inspection checklist"},
+  {w:"Week 14-20",t:"Silo Erection & Mechanical Install",d:"Structure, equipment, ductwork, catwalk, staircase"},
+  {w:"Week 20-22",t:"Electrical & Automation Install",d:"MCC, PLC programming, sensors, earthing, lightning protection"},
+  {w:"Week 22-24",t:"Commissioning & Trial Run",d:"No-load trial, grain trial, PLC tuning, aeration & monitoring"},
+  {w:"Week 24",t:"Handover & Training",d:"O&M manual, 2-day training, as-built drawings, 12-month DLP begins"},
+];
+
+const DPAY=[
+  {label:"Order advance on signing",pct:30},
+  {label:"On dispatch of silo structure",pct:30},
+  {label:"On dispatch of mechanical equipment",pct:30},
+  {label:"On commissioning & handover",pct:10},
+];
+
+const DFLOW=[
+  {title:"1. Intake",color:"#E59215",items:["Dump Pit Hopper","Drive-Over Grid","Dust Aspiration","Online Weigher"]},
+  {title:"2. Cleaning Tower",color:"#185FA5",items:["Rotary Scalper","Vibratory Screen","Magnetic Separator","Dust Collection"]},
+  {title:"3. Elevator",color:"#27500A",items:["Bucket Elevator","60 TPH","25m"]},
+  {title:"4. Storage Silo",color:"#C47E0E",items:["GI sidewalls","Aeration floor","Sweep auger","Temp monitoring","Aeration fans","Center gate"]},
+  {title:"5. Dispatch & Control",color:"#712B13",items:["Reclaim Conveyor","Belt Conveyor","Truck Loading","MCC Panel","PLC / SCADA","Level sensors","Remote monitor"]},
+];
+
 const PAGES=["Index","Cover","Equipment","Installation","Pricing","Tech Sheets","Timeline","Layout","Terms","References","Closing"];
 
 function calcT(secs,inst,pf,fr,tax,inc){
@@ -159,7 +203,7 @@ function Login({onAuth}){
   return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f5f5f3"}}><div style={{background:"#fff",borderRadius:16,padding:"40px 36px",maxWidth:380,width:"100%",boxShadow:"0 8px 40px rgba(0,0,0,.12)",textAlign:"center"}}><div style={{width:60,height:60,background:O,borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#fff",margin:"0 auto 20px"}}>BS</div><div style={{fontSize:20,fontWeight:700,marginBottom:4}}>Brag Systems</div><div style={{fontSize:12,color:"#888",marginBottom:28}}>Quote Builder</div><div style={{position:"relative",marginBottom:12}}><input type={show?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} placeholder="Enter access password" autoFocus style={{...IS,padding:"10px 40px 10px 12px",fontSize:13,border:err?"1.5px solid #E24B4A":"1.5px solid #ddd",textAlign:"center"}}/><button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:"#aaa",fontSize:14}}>{show?"hide":"show"}</button></div>{err&&<div style={{color:"#E24B4A",fontSize:12,marginBottom:10}}>Incorrect password.</div>}<button onClick={go} style={{width:"100%",padding:"10px",background:O,border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>Enter</button><div style={{marginTop:16,fontSize:11,color:"#bbb"}}>Authorised personnel only</div></div></div>);
 }
 
-function genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg){
+function genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg,sheets,phases,payTerms,flowStages,layoutNotes){
   const {jsPDF}=window.jspdf;
   const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
   const M=14,W=182;let y=0;
@@ -280,12 +324,38 @@ function genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,sig
   doc.setTextColor(180,180,180);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text("TOTAL PROJECT COST  (Supply + Tax + Installation Service)",M+5,y+9);
   doc.setTextColor(or,og,ob);doc.setFontSize(16);doc.setFont("helvetica","bold");doc.text(fmt(t.total),M+W-1,y+16,{align:"right"});y+=28;
   doc.setTextColor(26,26,26);doc.setFontSize(10);doc.setFont("helvetica","bold");doc.text("Payment Milestone Schedule",M,y);y+=5;
-  doc.autoTable({body:[["M1","30% — Order advance on signing of contract",fmt(t.total*0.30)],["M2","30% — Against dispatch of silo structure",fmt(t.total*0.30)],["M3","30% — Against dispatch of mechanical equipment",fmt(t.total*0.30)],["M4","10% — On commissioning & handover",fmt(t.total*0.10)]],startY:y,margin:{left:M,right:M},bodyStyles:{fontSize:9.5},columnStyles:{0:{cellWidth:12,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:126},2:{cellWidth:44,halign:"right",fontStyle:"bold",textColor:[or,og,ob]}}});
+  doc.autoTable({body:payTerms.map((p,i)=>["M"+(i+1),p.pct+"% — "+p.label,fmt(t.total*p.pct/100)]),startY:y,margin:{left:M,right:M},bodyStyles:{fontSize:9.5},columnStyles:{0:{cellWidth:12,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:126},2:{cellWidth:44,halign:"right",fontStyle:"bold",textColor:[or,og,ob]}}});
   pgFt("Commercial Summary");
+
+  // TECH SHEETS
+  addPg();secBar("Technical Data Sheets");
+  sheets.forEach(sh=>{
+    chk(14+Math.ceil(sh.specs.length/2)*7);
+    doc.setFillColor(249,249,247);doc.setDrawColor(230,230,228);doc.roundedRect(M,y,W,8,1.5,1.5,"FD");
+    doc.setTextColor(or,og,ob);doc.setFontSize(9.5);doc.setFont("helvetica","bold");doc.text(sh.name+(sh.model?"  ("+sh.model+")":""),M+3,y+5.5);y+=11;
+    const rows=[];for(let i=0;i<sh.specs.length;i+=2)rows.push([sh.specs[i][0],sh.specs[i][1],sh.specs[i+1]?sh.specs[i+1][0]:"",sh.specs[i+1]?sh.specs[i+1][1]:""]);
+    doc.autoTable({body:rows,startY:y,margin:{left:M,right:M},theme:"plain",bodyStyles:{fontSize:8.5,textColor:[60,60,60]},columnStyles:{0:{cellWidth:35,fontStyle:"bold",textColor:[100,100,100]},1:{cellWidth:56},2:{cellWidth:35,fontStyle:"bold",textColor:[100,100,100]},3:{cellWidth:56}}});
+    y=doc.lastAutoTable.finalY+6;
+  });
+  pgFt("Technical Data Sheets");
+
+  // LAYOUT / PROCESS FLOW
+  addPg();secBar("Basic Project Layout — Process Flow");
+  doc.setTextColor(120,120,120);doc.setFontSize(8.5);doc.setFont("helvetica","italic");doc.text("Schematic flow only — GA layout issued post-order within 2 weeks",M,y);y+=8;
+  flowStages.forEach(s=>{
+    chk(12);const c=rgb(s.color);
+    doc.setFillColor(c[0],c[1],c[2]);doc.roundedRect(M,y,4,6,1,1,"F");
+    doc.setTextColor(30,30,30);doc.setFontSize(9.5);doc.setFont("helvetica","bold");doc.text(s.title,M+8,y+5);y+=7;
+    doc.setTextColor(90,90,90);doc.setFontSize(8.5);doc.setFont("helvetica","normal");
+    const line=s.items.join("   •   ");
+    const split=doc.splitTextToSize(line,W-10);doc.text(split,M+8,y+4);y+=split.length*4.2+6;
+  });
+  if(layoutNotes&&layoutNotes.trim()){chk(16);doc.setTextColor(30,30,30);doc.setFontSize(9);doc.setFont("helvetica","bold");doc.text("Process flow notes:",M,y);y+=5;doc.setFont("helvetica","normal");doc.setFontSize(8.5);const ns=doc.splitTextToSize(layoutNotes,W);doc.text(ns,M,y);y+=ns.length*4.2;}
+  pgFt("Project Layout");
 
   // TIMELINE
   addPg();secBar("Project Timeline");
-  doc.autoTable({head:[["Period","Milestone","Scope"]],body:[["Week 1-2","Order Finalisation & Kickoff","Contract signing, 30% advance, site survey, drawing approval kickoff"],["Week 3-4","Engineering & Drawings","GA, foundation, SLD submitted for client approval within 10 working days"],["Week 5-8","Civil & Foundation Work","Silo foundation, plinths, pit — client scope, supervised by Brag Systems"],["Week 7-12","Equipment Mfg & FAT","Fabrication + Factory Acceptance Testing before dispatch"],["Week 12-14","Dispatch & Delivery","Progressive dispatch with site receipt inspection checklist"],["Week 14-20","Silo Erection & Mechanical","Structure, equipment, ductwork, catwalk, staircase"],["Week 20-22","Electrical & Automation","MCC, PLC programming, sensors, earthing, lightning protection"],["Week 22-24","Commissioning & Trial","No-load trial, grain trial, PLC tuning, aeration & monitoring"],["Week 24","Handover & Training","O&M manual, 2-day training, as-built drawings, 12-month DLP begins"]],startY:y,margin:{left:M,right:M},headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:9,fontStyle:"bold"},bodyStyles:{fontSize:9},columnStyles:{0:{cellWidth:22,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:56,fontStyle:"bold"},2:{cellWidth:104}}});
+  doc.autoTable({head:[["Period","Milestone","Scope"]],body:phases.map(p=>[p.w,p.t,p.d]),startY:y,margin:{left:M,right:M},headStyles:{fillColor:[or,og,ob],textColor:[255,255,255],fontSize:9,fontStyle:"bold"},bodyStyles:{fontSize:9},columnStyles:{0:{cellWidth:22,fontStyle:"bold",textColor:[or,og,ob]},1:{cellWidth:56,fontStyle:"bold"},2:{cellWidth:104}}});
   pgFt("Project Timeline");
 
   // TERMS
@@ -344,6 +414,11 @@ function App(){
   const [tax,setTax]=useState(18);
   const [terms,setTerms]=useState(JSON.parse(JSON.stringify(DT)));
   const [refs,setRefs]=useState(JSON.parse(JSON.stringify(DR)));
+  const [sheets,setSheets]=useState(JSON.parse(JSON.stringify(DSH)));
+  const [phases,setPhases]=useState(JSON.parse(JSON.stringify(DPH)));
+  const [payTerms,setPayTerms]=useState(JSON.parse(JSON.stringify(DPAY)));
+  const [flowStages,setFlowStages]=useState(JSON.parse(JSON.stringify(DFLOW)));
+  const [layoutNotes,setLayoutNotes]=useState("");
   const [cov,setCov]=useState({...DC});
   const [clo,setClo]=useState({...DCL});
   const [signImg,setSignImg]=useState(null);
@@ -356,6 +431,10 @@ function App(){
   const [termMod,setTermMod]=useState(null);
   const [refMod,setRefMod]=useState(null);
   const [secMod,setSecMod]=useState(null);
+  const [sheetMod,setSheetMod]=useState(null);
+  const [phaseMod,setPhaseMod]=useState(null);
+  const [payMod,setPayMod]=useState(null);
+  const [flowMod,setFlowMod]=useState(null);
   const [showSaved,setShowSaved]=useState(false);
   const [cfgMod,setCfgMod]=useState(false);
   const signRef=useRef(null);
@@ -368,7 +447,7 @@ function App(){
 
   async function saveQ(){
     if(!sb){setCfgMod(true);return;}setSaving(true);
-    const p={quote_num:quote.num,quote_date:quote.date,validity:quote.validity,client_name:client.name,client_company:client.company,client_city:client.city,client_email:client.email,client_phone:client.phone,client_project:client.project,client_silo_count:client.siloCount,client_capacity:client.capacity,client_grain:client.grain,incoterm:inc,pf,freight,tax,sections:JSON.stringify(secs),install_items:JSON.stringify(inst),terms:JSON.stringify(terms),refs:JSON.stringify(refs),cover:JSON.stringify(cov),closing:JSON.stringify(clo),total:Math.round(t.total),status:"draft",updated_at:new Date().toISOString()};
+    const p={quote_num:quote.num,quote_date:quote.date,validity:quote.validity,client_name:client.name,client_company:client.company,client_city:client.city,client_email:client.email,client_phone:client.phone,client_project:client.project,client_silo_count:client.siloCount,client_capacity:client.capacity,client_grain:client.grain,incoterm:inc,pf,freight,tax,sections:JSON.stringify(secs),install_items:JSON.stringify(inst),terms:JSON.stringify(terms),refs:JSON.stringify(refs),cover:JSON.stringify(cov),closing:JSON.stringify(clo),tech_sheets:JSON.stringify(sheets),timeline_phases:JSON.stringify(phases),payment_terms:JSON.stringify(payTerms),flow_stages:JSON.stringify(flowStages),layout_notes:layoutNotes,total:Math.round(t.total),status:"draft",updated_at:new Date().toISOString()};
     const{error}=await sb.from("quotes").upsert([p],{onConflict:"quote_num"});setSaving(false);
     if(error)shT("Save failed: "+error.message);else{shT("Saved — "+quote.num);loadSaved();}
   }
@@ -384,6 +463,11 @@ function App(){
     try{setRefs(JSON.parse(data.refs));}catch(e){}
     try{setCov({...DC,...JSON.parse(data.cover||"{}")});}catch(e){}
     try{setClo({...DCL,...JSON.parse(data.closing||"{}")});}catch(e){}
+    try{setSheets(data.tech_sheets?JSON.parse(data.tech_sheets):JSON.parse(JSON.stringify(DSH)));}catch(e){setSheets(JSON.parse(JSON.stringify(DSH)));}
+    try{setPhases(data.timeline_phases?JSON.parse(data.timeline_phases):JSON.parse(JSON.stringify(DPH)));}catch(e){setPhases(JSON.parse(JSON.stringify(DPH)));}
+    try{setPayTerms(data.payment_terms?JSON.parse(data.payment_terms):JSON.parse(JSON.stringify(DPAY)));}catch(e){setPayTerms(JSON.parse(JSON.stringify(DPAY)));}
+    try{setFlowStages(data.flow_stages?JSON.parse(data.flow_stages):JSON.parse(JSON.stringify(DFLOW)));}catch(e){setFlowStages(JSON.parse(JSON.stringify(DFLOW)));}
+    setLayoutNotes(data.layout_notes||"");
     setShowSaved(false);shT("Loaded: "+data.quote_num);
   }
 
@@ -399,6 +483,17 @@ function App(){
   const delTerm=(sec,idx)=>setTerms(prev=>({...prev,[sec]:prev[sec].filter((_,i)=>i!==idx)}));
   const saveRef=(idx,ref)=>{if(idx===-1)setRefs(p=>[...p,ref]);else setRefs(p=>p.map((r,i)=>i===idx?ref:r));setRefMod(null);shT("Saved");};
   const delRef=idx=>setRefs(p=>p.filter((_,i)=>i!==idx));
+
+  const saveSheet=(idx,sheet)=>{if(idx===-1)setSheets(p=>[...p,sheet]);else setSheets(p=>p.map((s,i)=>i===idx?sheet:s));setSheetMod(null);shT("Saved");};
+  const delSheet=idx=>setSheets(p=>p.filter((_,i)=>i!==idx));
+
+  const savePhase=(idx,ph)=>{if(idx===-1)setPhases(p=>[...p,ph]);else setPhases(p=>p.map((x,i)=>i===idx?ph:x));setPhaseMod(null);shT("Saved");};
+  const delPhase=idx=>setPhases(p=>p.filter((_,i)=>i!==idx));
+
+  const savePay=(idx,p2)=>{if(idx===-1)setPayTerms(p=>[...p,p2]);else setPayTerms(p=>p.map((x,i)=>i===idx?p2:x));setPayMod(null);shT("Saved");};
+  const delPay=idx=>setPayTerms(p=>p.filter((_,i)=>i!==idx));
+
+  const saveFlow=(idx,fl)=>{setFlowStages(p=>p.map((x,i)=>i===idx?fl:x));setFlowMod(null);shT("Saved");};
   const sEXW=s=>s.items.reduce((a,i)=>a+(i.qty||0)*(i.up||0),0);
 
   function handleSignUpload(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setSignImg(ev.target.result);r.readAsDataURL(f);}
@@ -410,7 +505,7 @@ function App(){
     <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
       <button onClick={()=>setPage(p=>Math.max(0,p-1))} style={{padding:"3px 9px",border:"1px solid #ddd",borderRadius:6,background:"#fff",cursor:"pointer",fontSize:12}}>Prev</button>
       <button onClick={()=>setPage(p=>Math.min(10,p+1))} style={{padding:"3px 9px",border:"1px solid #ddd",borderRadius:6,background:"#fff",cursor:"pointer",fontSize:12}}>Next</button>
-      <Btn ch="PDF" onClick={()=>genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg)} small/>
+      <Btn ch="PDF" onClick={()=>genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg,sheets,phases,payTerms,flowStages,layoutNotes)} small/>
       <Btn ch={saving?"...":"Save"} onClick={saveQ} small outline disabled={saving}/>
       <Btn ch="Load" onClick={()=>{loadSaved();setShowSaved(true);}} small outline/>
       <button onClick={()=>setCfgMod(true)} style={{padding:"3px 9px",border:"1px solid "+(sbConn?"#4CAF50":"#E24B4A"),borderRadius:6,background:"#fff",cursor:"pointer",fontSize:11,color:sbConn?"#4CAF50":"#E24B4A",fontWeight:700}}>{sbConn?"DB OK":"DB?"}</button>
@@ -444,10 +539,10 @@ function App(){
     <div style={{background:"#f9f9f7",borderRadius:10,padding:"12px 14px",border:"1px solid #eee"}}>
       <div style={{fontSize:10,fontWeight:700,marginBottom:8,color:"#555",textTransform:"uppercase",letterSpacing:"0.06em"}}>Quick actions</div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Btn ch="Generate PDF" onClick={()=>genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg)}/>
+        <Btn ch="Generate PDF" onClick={()=>genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg,sheets,phases,payTerms,flowStages,layoutNotes)}/>
         <Btn ch={saving?"Saving...":"Save to Supabase"} onClick={saveQ} outline disabled={saving}/>
         <Btn ch="Load saved" onClick={()=>{loadSaved();setShowSaved(true);}} outline/>
-        <Btn ch="New quote" onClick={()=>{setSecs(JSON.parse(JSON.stringify(DS)));setInst(JSON.parse(JSON.stringify(DI)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DT)));setRefs(JSON.parse(JSON.stringify(DR)));setCov({...DC});setClo({...DCL});setSignImg(null);setQuote({num:"BS-"+Date.now().toString().slice(-5),date:today,validity:"90"});shT("New quote started");}} outline/>
+        <Btn ch="New quote" onClick={()=>{setSecs(JSON.parse(JSON.stringify(DS)));setInst(JSON.parse(JSON.stringify(DI)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DT)));setRefs(JSON.parse(JSON.stringify(DR)));setCov({...DC});setClo({...DCL});setSheets(JSON.parse(JSON.stringify(DSH)));setPhases(JSON.parse(JSON.stringify(DPH)));setPayTerms(JSON.parse(JSON.stringify(DPAY)));setFlowStages(JSON.parse(JSON.stringify(DFLOW)));setLayoutNotes("");setSignImg(null);setQuote({num:"BS-"+Date.now().toString().slice(-5),date:today,validity:"90"});shT("New quote started");}} outline/>
       </div>
     </div>
   </div>);
@@ -623,93 +718,128 @@ function App(){
   </div>);
 
   const TechSheets=()=>(<div style={{padding:"0 16px"}}>
-    <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Technical data sheets</h2>
-    <p style={{fontSize:11,color:"#888",marginBottom:12}}>Key specs — confirmed at order stage</p>
-    {[{name:"Bucket Elevator",model:"BE-60-25",specs:[["Capacity","60 TPH"],["Head height","25 m"],["Motor","15 kW"],["Construction","MS Hot-Dip Galvanized"],["Belt","EP-315/3 Rubber 400mm"],["Speed","1.8 m/s"],["Bearings","SKF / FAG sealed"],["Finish","Epoxy + PU topcoat"]]},{name:"Flat Bed Vibratory Screen",model:"VFS-60",specs:[["Capacity","60 TPH"],["Decks","3-deck MS perforated"],["Mesh","Top 8mm/Mid 3mm/Bottom 1.5mm"],["Drive","Eccentric flywheel 960 RPM"],["Motor","7.5 kW TEFC"],["Outlets","3 fractions + tailings"]]},{name:"PLC Control System",model:"Siemens S7-1200",specs:[["I/O","64DI/48DO/16AI/8AO"],["HMI","15 inch Colour Touchscreen"],["Comms","Profinet / Ethernet-IP"],["Protocol","Modbus TCP OPC-UA"],["Enclosure","IP54 MS panel"],["Backup","UPS 30 min battery"]]},{name:"Centrifugal Aeration Fan",model:"CAF-7.5",specs:[["Flow","18000 m3/hr per fan"],["Static P","250 Pa"],["Motor","7.5 kW IE3"],["Speed","960 RPM"],["Impeller","Backward curved GI"],["Outlet","400mm flanged"]]},{name:"Grain Monitoring System",model:"OPI-GMS-8",specs:[["Cables","8 temp/moisture cables"],["Sensors","12 per cable at 1.5m"],["Temp","-20 to +70 deg C"],["MC","10-30%"],["Accuracy","+/-0.3C / +/-0.5% MC"],["Interface","Web + mobile app"]]},{name:"Sweep Auger with Tractor Drive",model:"SAU-D/2",specs:[["Reach","Exactly R/2 (half silo dia)"],["Auger","6 inch 150mm pitch MS"],["Tractor","4 PU wheels 1.5 kW motor"],["Revolution","2 RPM"],["Drive","3 kW centre gearbox"],["Finish","Hot-dip galvanized"]]}].map((sh,idx)=>(<div key={idx} style={{background:"#fff",border:"1px solid #eee",borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:6,marginBottom:3}}>
+      <div><h2 style={{fontSize:14,fontWeight:700}}>Technical data sheets</h2><p style={{fontSize:11,color:"#888",marginTop:2}}>Key specs — confirmed at order stage. Add, edit or remove — changes appear in PDF</p></div>
+      <Btn ch="+ Add sheet" onClick={()=>setSheetMod({idx:-1,sheet:{name:"",model:"",specs:[["",""]]}})} small/>
+    </div>
+    {sheets.map((sh,idx)=>(<div key={idx} style={{background:"#fff",border:"1px solid #eee",borderRadius:10,marginBottom:10,overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:"1px solid #eee",background:"#f9f9f7"}}>
         <div style={{width:26,height:26,borderRadius:7,background:O,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,flexShrink:0}}>G</div>
         <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:700}}>{sh.name}</div><div style={{fontSize:11,color:"#888"}}>{sh.model}</div></div>
-        <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:"#FAEEDA",color:"#633806"}}>Quoted</span>
+        <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:"#FAEEDA",color:"#633806",marginRight:8}}>Quoted</span>
+        <div style={{display:"flex",gap:4,flexShrink:0}}>
+          <button onClick={()=>setSheetMod({idx,sheet:JSON.parse(JSON.stringify(sh))})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 5px",fontSize:11,cursor:"pointer"}}>edit</button>
+          <button onClick={()=>delSheet(idx)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 5px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>del</button>
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
-        {sh.specs.map(([k,v],i)=>(<div key={k} style={{padding:"6px 12px",borderBottom:"1px solid #f5f5f5",borderRight:i%2===0?"1px solid #f5f5f5":"none",fontSize:11.5}}><label style={{...LS,marginBottom:1}}>{k}</label><div>{v}</div></div>))}
+        {sh.specs.map(([k,v],i)=>(<div key={k+i} style={{padding:"6px 12px",borderBottom:"1px solid #f5f5f5",borderRight:i%2===0?"1px solid #f5f5f5":"none",fontSize:11.5}}><label style={{...LS,marginBottom:1}}>{k}</label><div>{v}</div></div>))}
       </div>
     </div>))}
+    {sheets.length===0&&<div style={{padding:"24px",textAlign:"center",color:"#aaa",fontSize:13}}>No tech sheets. Click + Add sheet above.</div>}
   </div>);
 
   const Timeline=()=>{
-    const phases=[{w:"Week 1-2",t:"Order Finalisation & Kickoff",d:"Contract signing, 30% advance, site survey, drawing approval kickoff"},{w:"Week 3-4",t:"Engineering & Drawing Approval",d:"GA, foundation, SLD submitted for client approval within 10 working days"},{w:"Week 5-8",t:"Civil & Foundation Work",d:"Silo foundation, plinths, pit — client scope, supervised by Brag Systems"},{w:"Week 7-12",t:"Equipment Manufacturing & FAT",d:"Fabrication + Factory Acceptance Testing before dispatch"},{w:"Week 12-14",t:"Dispatch & Site Delivery",d:"Progressive dispatch with site receipt inspection checklist"},{w:"Week 14-20",t:"Silo Erection & Mechanical Install",d:"Structure, equipment, ductwork, catwalk, staircase"},{w:"Week 20-22",t:"Electrical & Automation Install",d:"MCC, PLC programming, sensors, earthing, lightning protection"},{w:"Week 22-24",t:"Commissioning & Trial Run",d:"No-load trial, grain trial, PLC tuning, aeration & monitoring"},{w:"Week 24",t:"Handover & Training",d:"O&M manual, 2-day training, as-built drawings, 12-month DLP begins"}];
+    const payTotal=payTerms.reduce((a,p)=>a+(p.pct||0),0);
     return(<div style={{padding:"0 16px"}}>
-      <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Project timeline</h2>
-      <p style={{fontSize:11,color:"#888",marginBottom:12}}>Indicative for single silo — multi-silo add 4-8 weeks</p>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:6,marginBottom:3}}>
+        <div><h2 style={{fontSize:14,fontWeight:700}}>Project timeline</h2><p style={{fontSize:11,color:"#888",marginTop:2}}>Indicative for single silo — multi-silo add 4-8 weeks. Add, edit or remove phases — changes appear in PDF</p></div>
+        <Btn ch="+ Add phase" onClick={()=>setPhaseMod({idx:-1,phase:{w:"",t:"",d:""}})} small/>
+      </div>
       <div style={{background:"#fff",border:"1px solid #eee",borderRadius:8,padding:"10px 12px",marginBottom:14}}>
         <div style={{display:"flex",gap:18,flexWrap:"wrap",fontSize:12}}>
-          <div><span style={{color:"#888"}}>Duration</span><strong style={{marginLeft:4}}>22-24 weeks</strong></div>
+          <div><span style={{color:"#888"}}>Duration</span><strong style={{marginLeft:4}}>{phases.length?phases[0].w+" – "+phases[phases.length-1].w:"—"}</strong></div>
           <div><span style={{color:"#888"}}>DLP</span><strong style={{marginLeft:4}}>12 months</strong></div>
-          <div><span style={{color:"#888"}}>Payment</span><strong style={{marginLeft:4}}>30 - 60 - 10</strong></div>
+          <div><span style={{color:"#888"}}>Payment</span><strong style={{marginLeft:4}}>{payTerms.map(p=>p.pct).join(" - ")}</strong></div>
         </div>
       </div>
       <div style={{position:"relative",paddingLeft:28,marginBottom:14}}>
         <div style={{position:"absolute",left:9,top:4,bottom:4,width:1,background:"#eee"}}/>
         {phases.map((p,i)=>(<div key={i} style={{position:"relative",marginBottom:14}}>
           <div style={{position:"absolute",left:-22,width:18,height:18,borderRadius:"50%",background:O,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",top:2}}>{i+1}</div>
-          <div style={{fontSize:10,color:O,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{p.w}</div>
-          <div style={{fontSize:12.5,fontWeight:700,marginBottom:2}}>{p.t}</div>
-          <div style={{fontSize:11.5,color:"#666",lineHeight:1.45}}>{p.d}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,color:O,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{p.w}</div>
+              <div style={{fontSize:12.5,fontWeight:700,marginBottom:2}}>{p.t}</div>
+              <div style={{fontSize:11.5,color:"#666",lineHeight:1.45}}>{p.d}</div>
+            </div>
+            <div style={{display:"flex",gap:4,flexShrink:0}}>
+              <button onClick={()=>setPhaseMod({idx:i,phase:{...p}})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 5px",fontSize:11,cursor:"pointer"}}>edit</button>
+              <button onClick={()=>delPhase(i)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 5px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>del</button>
+            </div>
+          </div>
         </div>))}
+        {phases.length===0&&<div style={{padding:"14px",color:"#aaa",fontSize:12}}>No phases. Click + Add phase above.</div>}
       </div>
       <div style={{background:"#f9f9f7",borderRadius:8,padding:"12px 14px",border:"1px solid #eee"}}>
-        <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#888",marginBottom:8}}>Payment milestone schedule</div>
-        {[["30% - Order advance on signing",t.total*0.30],["30% - On dispatch of silo structure",t.total*0.30],["30% - On dispatch of mechanical equipment",t.total*0.30],["10% - On commissioning & handover",t.total*0.10]].map(([l,v])=>(<PR key={l} label={l} val={fmt(v)}/>))}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",color:"#888"}}>Payment milestone schedule {payTotal!==100&&<span style={{color:"#E24B4A",textTransform:"none",fontWeight:400}}>&nbsp;(totals {payTotal}%, should be 100%)</span>}</div>
+          <Btn ch="+ Add" onClick={()=>setPayMod({idx:-1,pay:{label:"",pct:0}})} small/>
+        </div>
+        {payTerms.map((p,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
+          <span style={{flex:1,fontSize:12}}>{p.pct}% - {p.label}</span>
+          <span style={{fontSize:12,fontFamily:"monospace",fontWeight:600}}>{fmt(t.total*p.pct/100)}</span>
+          <button onClick={()=>setPayMod({idx:i,pay:{...p}})} style={{background:"none",border:"1px solid #ddd",borderRadius:4,padding:"2px 5px",fontSize:11,cursor:"pointer"}}>edit</button>
+          <button onClick={()=>delPay(i)} style={{background:"none",border:"1px solid #fdd",borderRadius:4,padding:"2px 5px",fontSize:11,cursor:"pointer",color:"#E24B4A"}}>del</button>
+        </div>))}
+        {payTerms.length===0&&<div style={{padding:"10px",color:"#aaa",fontSize:12}}>No milestones. Click + Add above.</div>}
       </div>
     </div>);
   };
 
   const Layout=()=>(<div style={{padding:"0 16px"}}>
-    <h2 style={{fontSize:14,fontWeight:700,marginBottom:3}}>Basic project layout</h2>
-    <p style={{fontSize:11,color:"#888",marginBottom:12}}>Schematic flow only — GA layout issued post-order within 2 weeks</p>
-    <div style={{background:"#f9f9f7",borderRadius:10,padding:12,overflowX:"auto",border:"1px solid #eee"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:6,marginBottom:3}}>
+      <div><h2 style={{fontSize:14,fontWeight:700}}>Basic project layout</h2><p style={{fontSize:11,color:"#888",marginTop:2}}>Schematic flow only — GA layout issued post-order within 2 weeks. Edit each stage's item list below — changes appear in PDF</p></div>
+    </div>
+    <div style={{background:"#f9f9f7",borderRadius:10,padding:12,overflowX:"auto",border:"1px solid #eee",marginBottom:10}}>
       <svg viewBox="0 0 820 460" style={{minWidth:600,width:"100%"}}>
         <defs><marker id="ar" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill={O}/></marker></defs>
-        <rect x="10" y="50" width="128" height="330" rx="6" fill="#fff" stroke={O} strokeWidth="1.2"/>
-        <rect x="10" y="50" width="128" height="26" rx="6" fill={O}/><rect x="10" y="64" width="128" height="12" fill={O}/>
-        <text x="74" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">1. Intake</text>
-        {[["Dump Pit Hopper",90],["Drive-Over Grid",116],["Dust Aspiration",142],["Online Weigher",168]].map(([tt,yy])=>(<g key={tt}><rect x="20" y={yy} width="108" height="20" rx="3" fill="#f9f9f7" stroke="#eee" strokeWidth=".5"/><text x="74" y={yy+13} textAnchor="middle" fontSize="8.5" fill="#333">{tt}</text></g>))}
+        <rect x="10" y="50" width="128" height="330" rx="6" fill="#fff" stroke={flowStages[0].color} strokeWidth="1.2"/>
+        <rect x="10" y="50" width="128" height="26" rx="6" fill={flowStages[0].color}/><rect x="10" y="64" width="128" height="12" fill={flowStages[0].color}/>
+        <text x="74" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">{flowStages[0].title}</text>
+        {flowStages[0].items.map((tt,i)=>(<g key={tt+i}><rect x="20" y={90+i*26} width="108" height="20" rx="3" fill="#f9f9f7" stroke="#eee" strokeWidth=".5"/><text x="74" y={90+i*26+13} textAnchor="middle" fontSize="8.5" fill="#333">{tt}</text></g>))}
         <line x1="138" y1="195" x2="168" y2="195" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
-        <rect x="168" y="50" width="138" height="330" rx="6" fill="#fff" stroke="#185FA5" strokeWidth="1.2"/>
-        <rect x="168" y="50" width="138" height="26" rx="6" fill="#185FA5"/><rect x="168" y="64" width="138" height="12" fill="#185FA5"/>
-        <text x="237" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">2. Cleaning Tower</text>
-        {[["Rotary Scalper",90],["Vibratory Screen",116],["Magnetic Separator",142],["Dust Collection",168]].map(([tt,yy])=>(<g key={tt}><rect x="178" y={yy} width="118" height="20" rx="3" fill="#eef2ff" stroke="#c5d0f0" strokeWidth=".5"/><text x="237" y={yy+13} textAnchor="middle" fontSize="8.5" fill="#333">{tt}</text></g>))}
+        <rect x="168" y="50" width="138" height="330" rx="6" fill="#fff" stroke={flowStages[1].color} strokeWidth="1.2"/>
+        <rect x="168" y="50" width="138" height="26" rx="6" fill={flowStages[1].color}/><rect x="168" y="64" width="138" height="12" fill={flowStages[1].color}/>
+        <text x="237" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">{flowStages[1].title}</text>
+        {flowStages[1].items.map((tt,i)=>(<g key={tt+i}><rect x="178" y={90+i*26} width="118" height="20" rx="3" fill="#eef2ff" stroke="#c5d0f0" strokeWidth=".5"/><text x="237" y={90+i*26+13} textAnchor="middle" fontSize="8.5" fill="#333">{tt}</text></g>))}
         <line x1="306" y1="195" x2="336" y2="195" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
-        <rect x="336" y="30" width="76" height="370" rx="6" fill="#fff" stroke="#27500A" strokeWidth="1.2"/>
-        <rect x="336" y="30" width="76" height="26" rx="6" fill="#27500A"/><rect x="336" y="44" width="76" height="12" fill="#27500A"/>
-        <text x="374" y="47" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">3. Elevator</text>
-        {["Bucket Elevator","60 TPH","25m"].map((tt,i)=><text key={tt} x="374" y={74+i*14} textAnchor="middle" fontSize="9" fill="#555">{tt}</text>)}
-        <line x1="374" y1="115" x2="374" y2="385" stroke="#27500A" strokeWidth="1" strokeDasharray="5,3"/>
+        <rect x="336" y="30" width="76" height="370" rx="6" fill="#fff" stroke={flowStages[2].color} strokeWidth="1.2"/>
+        <rect x="336" y="30" width="76" height="26" rx="6" fill={flowStages[2].color}/><rect x="336" y="44" width="76" height="12" fill={flowStages[2].color}/>
+        <text x="374" y="47" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">{flowStages[2].title}</text>
+        {flowStages[2].items.map((tt,i)=><text key={tt+i} x="374" y={74+i*14} textAnchor="middle" fontSize="9" fill="#555">{tt}</text>)}
+        <line x1="374" y1="115" x2="374" y2="385" stroke={flowStages[2].color} strokeWidth="1" strokeDasharray="5,3"/>
         <line x1="412" y1="63" x2="452" y2="63" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
         <text x="432" y="57" textAnchor="middle" fontSize="8" fill="#888">Distributor</text>
-        <rect x="452" y="30" width="160" height="360" rx="6" fill="#fff" stroke="#C47E0E" strokeWidth="1.5"/>
+        <rect x="452" y="30" width="160" height="360" rx="6" fill="#fff" stroke={flowStages[3].color} strokeWidth="1.5"/>
         <rect x="452" y="30" width="160" height="26" rx="6" fill={O}/><rect x="452" y="44" width="160" height="12" fill={O}/>
-        <text x="532" y="47" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">4. Storage Silo</text>
-        <ellipse cx="532" cy="96" rx="58" ry="11" fill="none" stroke="#C47E0E" strokeWidth=".8"/>
-        <line x1="474" y1="96" x2="474" y2="276" stroke="#C47E0E" strokeWidth=".8"/>
-        <line x1="590" y1="96" x2="590" y2="276" stroke="#C47E0E" strokeWidth=".8"/>
+        <text x="532" y="47" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">{flowStages[3].title}</text>
+        <ellipse cx="532" cy="96" rx="58" ry="11" fill="none" stroke={flowStages[3].color} strokeWidth=".8"/>
+        <line x1="474" y1="96" x2="474" y2="276" stroke={flowStages[3].color} strokeWidth=".8"/>
+        <line x1="590" y1="96" x2="590" y2="276" stroke={flowStages[3].color} strokeWidth=".8"/>
         {[132,164,196,228,260].map(yy=><line key={yy} x1="474" y1={yy} x2="590" y2={yy} stroke="#eee" strokeWidth=".5"/>)}
-        <path d="M474,276 L510,324 L554,324 L590,276 Z" fill="none" stroke="#C47E0E" strokeWidth=".8"/>
-        <line x1="532" y1="324" x2="532" y2="350" stroke="#C47E0E" strokeWidth="1.2"/>
-        {[["GI sidewalls",112],["Aeration floor",146],["Sweep auger",180],["Temp monitoring",213],["Aeration fans",246],["Center gate",340]].map(([tt,yy])=><text key={tt} x="532" y={yy} textAnchor="middle" fontSize="8" fill="#666">{tt}</text>)}
+        <path d="M474,276 L510,324 L554,324 L590,276 Z" fill="none" stroke={flowStages[3].color} strokeWidth=".8"/>
+        <line x1="532" y1="324" x2="532" y2="350" stroke={flowStages[3].color} strokeWidth="1.2"/>
+        {flowStages[3].items.map((tt,i)=><text key={tt+i} x="532" y={108+i*22} textAnchor="middle" fontSize="8" fill="#666">{tt}</text>)}
         <line x1="612" y1="312" x2="648" y2="312" stroke={O} strokeWidth="1.5" markerEnd="url(#ar)"/>
-        <rect x="648" y="50" width="158" height="330" rx="6" fill="#fff" stroke="#712B13" strokeWidth="1.2"/>
-        <rect x="648" y="50" width="158" height="26" rx="6" fill="#712B13"/><rect x="648" y="64" width="158" height="12" fill="#712B13"/>
-        <text x="727" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">5. Dispatch &amp; Control</text>
-        {[["Reclaim Conveyor",90],["Belt Conveyor",116],["Truck Loading",142]].map(([tt,yy])=>(<g key={tt}><rect x="658" y={yy} width="138" height="20" rx="3" fill="#fff0ee" stroke="#f0d0c8" strokeWidth=".5"/><text x="727" y={yy+13} textAnchor="middle" fontSize="8.5" fill="#333">{tt}</text></g>))}
-        {["MCC Panel","PLC / SCADA","Level sensors","Remote monitor"].map((tt,i)=><text key={tt} x="727" y={196+i*18} textAnchor="middle" fontSize="9" fill="#666">{tt}</text>)}
+        <rect x="648" y="50" width="158" height="330" rx="6" fill="#fff" stroke={flowStages[4].color} strokeWidth="1.2"/>
+        <rect x="648" y="50" width="158" height="26" rx="6" fill={flowStages[4].color}/><rect x="648" y="64" width="158" height="12" fill={flowStages[4].color}/>
+        <text x="727" y="67" textAnchor="middle" fontSize="9.5" fontWeight="700" fill="#fff">{flowStages[4].title}</text>
+        {flowStages[4].items.map((tt,i)=><text key={tt+i} x="727" y={100+i*18} textAnchor="middle" fontSize="9" fill="#666">{tt}</text>)}
         <rect x="10" y="408" width="800" height="44" rx="5" fill="#fff" stroke="#eee" strokeWidth=".5"/>
         <text x="20" y="425" fontSize="9" fontWeight="700" fill="#888">LEGEND:</text>
-        {[[O,"Intake",75],["#185FA5","Cleaning",140],["#27500A","Elevating",215],[O,"Silo",285],["#712B13","Dispatch",350]].map(([c,l,x])=>(<g key={l}><rect x={x} y="417" width="10" height="8" rx="2" fill={c}/><text x={x+14} y="425" fontSize="8.5" fill="#555">{l}</text></g>))}
+        {flowStages.map((s,i)=>(<g key={s.title}><rect x={75+i*145} y="417" width="10" height="8" rx="2" fill={s.color}/><text x={75+i*145+14} y="425" fontSize="8.5" fill="#555">{s.title.replace(/^\d+\.\s*/,"")}</text></g>))}
         <text x="20" y="443" fontSize="8" fill="#bbb">Schematic only. GA drawings issued within 2 weeks of order.</text>
       </svg>
     </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:14}}>
+      {flowStages.map((s,i)=>(<div key={s.title} style={{background:"#fff",border:"1px solid #eee",borderLeft:"3px solid "+s.color,borderRadius:8,padding:"8px 10px"}}>
+        <div style={{fontSize:11,fontWeight:700,marginBottom:6}}>{s.title}</div>
+        <button onClick={()=>setFlowMod({idx:i})} style={{width:"100%",background:"none",border:"1px solid #ddd",borderRadius:5,padding:"3px 0",fontSize:11,cursor:"pointer"}}>Edit items</button>
+      </div>))}
+    </div>
+    <h3 style={{fontSize:13,fontWeight:700,marginBottom:8}}>Process flow notes <span style={{fontSize:10,color:"#888",fontWeight:400}}>optional — appears below diagram in PDF</span></h3>
+    <SF label="" val={layoutNotes} fn={setLayoutNotes} rows={3} ph="Any additional notes on the process flow for this project..."/>
   </div>);
 
   const TermsPage=()=>{
@@ -792,9 +922,9 @@ function App(){
     </div>
     <p style={{fontSize:11,color:"#aaa",marginBottom:16}}>PNG/JPG/GIF — white or transparent background. Image appears above signature line in PDF.</p>
     <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-      <Btn ch="Download PDF" onClick={()=>genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg)}/>
+      <Btn ch="Download PDF" onClick={()=>genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,signImg,sheets,phases,payTerms,flowStages,layoutNotes)}/>
       <Btn ch={saving?"Saving...":"Save to cloud"} onClick={saveQ} outline disabled={saving}/>
-      <Btn ch="New quote" onClick={()=>{setSecs(JSON.parse(JSON.stringify(DS)));setInst(JSON.parse(JSON.stringify(DI)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DT)));setRefs(JSON.parse(JSON.stringify(DR)));setCov({...DC});setClo({...DCL});setSignImg(null);setQuote({num:"BS-"+Date.now().toString().slice(-5),date:today,validity:"90"});setPage(0);shT("New quote ready");}} outline/>
+      <Btn ch="New quote" onClick={()=>{setSecs(JSON.parse(JSON.stringify(DS)));setInst(JSON.parse(JSON.stringify(DI)));setClient({name:"",company:"",city:"",email:"",phone:"",project:"",siloCount:"",capacity:"",grain:""});setTerms(JSON.parse(JSON.stringify(DT)));setRefs(JSON.parse(JSON.stringify(DR)));setCov({...DC});setClo({...DCL});setSheets(JSON.parse(JSON.stringify(DSH)));setPhases(JSON.parse(JSON.stringify(DPH)));setPayTerms(JSON.parse(JSON.stringify(DPAY)));setFlowStages(JSON.parse(JSON.stringify(DFLOW)));setLayoutNotes("");setSignImg(null);setQuote({num:"BS-"+Date.now().toString().slice(-5),date:today,validity:"90"});setPage(0);shT("New quote ready");}} outline/>
     </div>
   </div>);
 
@@ -807,6 +937,42 @@ function App(){
   const RefMod=()=>{const[ref,setRef]=useState({state:"",client:"",project:"",year:new Date().getFullYear().toString(),contact:"",...(refMod.ref||{})});return(<Modal title={refMod.idx>=0?"Edit reference":"Add reference"} onClose={()=>setRefMod(null)} wide><div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><F label="Client / company name" val={ref.client} fn={v=>setRef(r=>({...r,client:v}))} ph="Company name"/><F label="State" val={ref.state} fn={v=>setRef(r=>({...r,state:v}))} ph="e.g. Punjab"/></div><F label="Project description" val={ref.project} fn={v=>setRef(r=>({...r,project:v}))} ph="e.g. 2x5000 MT paddy silos, full turnkey" rows={2}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><F label="Year" val={ref.year} fn={v=>setRef(r=>({...r,year:v}))} ph="2024"/><F label="Contact (internal only, not in PDF)" val={ref.contact||""} fn={v=>setRef(r=>({...r,contact:v}))} ph="+91 XXXXX"/></div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setRefMod(null)} outline/><Btn ch="Save reference" onClick={()=>{if(ref.client&&ref.project)saveRef(refMod.idx,ref);else shT("Client and project required");}}/></div></div></Modal>);};
 
   const SecMod=()=>{const[name,setName]=useState("");return(<Modal title="Add equipment section" onClose={()=>setSecMod(null)}><div style={{display:"flex",flexDirection:"column",gap:10}}><F label="Section name" val={name} fn={setName} ph="e.g. Special Equipment / Weighbridge / Grain Dryer"/><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setSecMod(null)} outline/><Btn ch="Add section" onClick={()=>{if(name.trim()){setSecs(p=>[...p,{id:p.length+1,name,open:true,items:[]}]);setSecMod(null);shT("Section added");}}}/></div></div></Modal>);};
+
+  const SheetMod=()=>{
+    const init=sheetMod.sheet;
+    const[name,setName]=useState(init.name||"");
+    const[model,setModel]=useState(init.model||"");
+    const[specTxt,setSpecTxt]=useState((init.specs||[]).map(([k,v])=>k+": "+v).join("\n"));
+    function parse(){return specTxt.split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.indexOf(":");return i===-1?[l,""]:[l.slice(0,i).trim(),l.slice(i+1).trim()];});}
+    return(<Modal title={sheetMod.idx>=0?"Edit tech sheet":"Add tech sheet"} onClose={()=>setSheetMod(null)} wide><div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><F label="Equipment name" val={name} fn={setName} ph="e.g. Bucket Elevator"/><F label="Model" val={model} fn={setModel} ph="e.g. BE-60-25"/></div>
+      <F label="Specifications — one per line, format Key: Value" val={specTxt} fn={setSpecTxt} rows={8} ph={"Capacity: 60 TPH\nMotor: 15 kW"}/>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setSheetMod(null)} outline/><Btn ch="Save sheet" onClick={()=>{if(name.trim())saveSheet(sheetMod.idx,{name,model,specs:parse()});else shT("Name required");}}/></div>
+    </div></Modal>);
+  };
+
+  const PhaseMod=()=>{const init=phaseMod.phase||{};const[w,setW]=useState(init.w||"");const[ti,setTi]=useState(init.t||"");const[d,setD]=useState(init.d||"");
+    return(<Modal title={phaseMod.idx>=0?"Edit timeline phase":"Add timeline phase"} onClose={()=>setPhaseMod(null)} wide><div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <F label="Period (e.g. Week 1-2)" val={w} fn={setW} ph="Week 1-2"/>
+      <F label="Milestone title" val={ti} fn={setTi} ph="Order Finalisation & Kickoff"/>
+      <F label="Scope description" val={d} fn={setD} rows={2} ph="What happens in this phase"/>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setPhaseMod(null)} outline/><Btn ch="Save phase" onClick={()=>{if(w.trim()&&ti.trim())savePhase(phaseMod.idx,{w,t:ti,d});else shT("Period and title required");}}/></div>
+    </div></Modal>);};
+
+  const PayMod=()=>{const init=payMod.pay||{};const[label,setLabel]=useState(init.label||"");const[pct,setPct]=useState(init.pct||0);
+    return(<Modal title={payMod.idx>=0?"Edit payment milestone":"Add payment milestone"} onClose={()=>setPayMod(null)}><div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <F label="Milestone label" val={label} fn={setLabel} ph="e.g. On dispatch of silo structure"/>
+      <F label="Percentage of total (%)" val={pct} fn={v=>setPct(+v)} type="number"/>
+      <div style={{background:"#f9f9f7",borderRadius:6,padding:"8px 12px",fontSize:12,color:"#888"}}>Running total of all milestones should equal 100%.</div>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setPayMod(null)} outline/><Btn ch="Save" onClick={()=>{if(label.trim())savePay(payMod.idx,{label,pct});else shT("Label required");}}/></div>
+    </div></Modal>);};
+
+  const FlowMod=()=>{const init=flowStages[flowMod.idx];const[title,setTitle]=useState(init.title);const[itemsTxt,setItemsTxt]=useState(init.items.join("\n"));
+    return(<Modal title={"Edit stage: "+init.title} onClose={()=>setFlowMod(null)}><div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <F label="Stage title" val={title} fn={setTitle}/>
+      <F label="Items — one per line, shown inside the diagram box" val={itemsTxt} fn={setItemsTxt} rows={6}/>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setFlowMod(null)} outline/><Btn ch="Save stage" onClick={()=>saveFlow(flowMod.idx,{...init,title,items:itemsTxt.split("\n").map(l=>l.trim()).filter(Boolean)})}/></div>
+    </div></Modal>);};
 
   const SavedMod=()=>(<Modal title={"Saved quotes ("+saved.length+")"} onClose={()=>setShowSaved(false)}>
     {!sbConn&&<div style={{background:"#FFF3CD",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#856404"}}>Supabase not configured. <button onClick={()=>{setShowSaved(false);setCfgMod(true);}} style={{color:O,fontWeight:700,background:"none",border:"none",cursor:"pointer"}}>Configure</button></div>}
@@ -823,8 +989,8 @@ function App(){
   </Modal>);
 
   const CfgMod=()=>{const[url,setUrl]=useState(SUPA_URL);const[key2,setKey]=useState(SUPA_KEY);const[testing,setTesting]=useState(false);const[res,setRes]=useState("");
-    async function test(){setTesting(true);setRes("");try{const t2=window.supabase.createClient(url,key2);const{error}=await t2.from("quotes").select("id").limit(1);if(error)setRes("Error: "+error.message);else{setRes("Connected! quotes table found.");setTimeout(()=>{sb=t2;setSbConn(true);setCfgMod(false);loadSaved();shT("Supabase connected!");},800);}}catch(e){setRes("Failed: "+e.message);}setTesting(false);}
-    return(<Modal title="Configure Supabase" onClose={()=>setCfgMod(false)}><div style={{background:"#EAF3DE",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#27500A"}}>Use the same Supabase project as your invoice app. Copy Project URL and anon key from Settings - API.</div><div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}><F label="Project URL" val={url} fn={setUrl} ph="https://xxx.supabase.co"/><F label="Anon / public key" val={key2} fn={setKey} ph="eyJ..."/></div>{res&&<div style={{padding:"8px 12px",borderRadius:6,background:res.includes("Connected")?"#EAF3DE":"#FCEBEB",color:res.includes("Connected")?"#27500A":"#791F1F",fontSize:12,marginBottom:10}}>{res}</div>}<div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ch="Cancel" onClick={()=>setCfgMod(false)} outline/><Btn ch={testing?"Testing...":"Test & connect"} onClick={test} disabled={testing}/></div><div style={{marginTop:12,padding:"8px 12px",background:"#f9f9f7",borderRadius:6,fontSize:11,color:"#777"}}>For permanent setup: edit SUPA_URL and SUPA_KEY at top of index.html and push to GitHub.</div></Modal>);};
+    async function test(){setTesting(true);setRes("");try{const t2=window.supabase.createClient(url,key2);const{error}=await t2.from("quotes").select("id").limit(1);if(error)setRes("Error: "+error.message);else{setRes("Connected! quotes table found.");try{localStorage.setItem("bs_supabase_cfg",JSON.stringify({url,key:key2}));}catch(e){}setTimeout(()=>{sb=t2;setSbConn(true);setCfgMod(false);loadSaved();shT("Supabase connected — saved for future logins");},800);}}catch(e){setRes("Failed: "+e.message);}setTesting(false);}
+    return(<Modal title="Configure Supabase" onClose={()=>setCfgMod(false)}><div style={{background:"#EAF3DE",borderRadius:6,padding:"10px 12px",marginBottom:12,fontSize:12,color:"#27500A"}}>Use the same Supabase project as your invoice app. Copy Project URL and anon key from Settings - API. Once connected, this is saved in your browser so you won't need to reconnect on future logins.</div><div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}><F label="Project URL" val={url} fn={setUrl} ph="https://xxx.supabase.co"/><F label="Anon / public key" val={key2} fn={setKey} ph="eyJ..."/></div>{res&&<div style={{padding:"8px 12px",borderRadius:6,background:res.includes("Connected")?"#EAF3DE":"#FCEBEB",color:res.includes("Connected")?"#27500A":"#791F1F",fontSize:12,marginBottom:10}}>{res}</div>}<div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>{sbConn&&<Btn ch="Disconnect" onClick={()=>{try{localStorage.removeItem("bs_supabase_cfg");}catch(e){}sb=null;setSbConn(false);setSaved([]);shT("Disconnected");}} outline danger/>}<Btn ch="Cancel" onClick={()=>setCfgMod(false)} outline/><Btn ch={testing?"Testing...":"Test & connect"} onClick={test} disabled={testing}/></div><div style={{marginTop:12,padding:"8px 12px",background:"#f9f9f7",borderRadius:6,fontSize:11,color:"#777"}}>For permanent setup: edit SUPA_URL and SUPA_KEY at top of index.html and push to GitHub.</div></Modal>);};
 
   if(!authed)return <Login onAuth={()=>setAuthed(true)}/>;
   const PCs=[Index,Cover,Equipment,Installation,Pricing,TechSheets,Timeline,Layout,TermsPage,References,Closing];
@@ -837,7 +1003,7 @@ function App(){
       <div style={{textAlign:"center"}}><div style={{fontSize:12,fontWeight:700}}>{PAGES[page]}</div><div style={{fontSize:10,color:"#aaa"}}>{page+1} / {PAGES.length}</div></div>
       <button onClick={()=>setPage(p=>Math.min(10,p+1))} disabled={page===10} style={{padding:"6px 14px",border:"none",borderRadius:7,background:O,color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12,opacity:page===10?0.4:1}}>Next: {page<10?PAGES[page+1]:"Done"}</button>
     </div>
-    {itemMod&&<ItemMod/>}{instMod&&<InstMod/>}{termMod&&<TermMod/>}{refMod&&<RefMod/>}{secMod&&<SecMod/>}{showSaved&&<SavedMod/>}{cfgMod&&<CfgMod/>}
+    {itemMod&&<ItemMod/>}{instMod&&<InstMod/>}{termMod&&<TermMod/>}{refMod&&<RefMod/>}{secMod&&<SecMod/>}{sheetMod&&<SheetMod/>}{phaseMod&&<PhaseMod/>}{payMod&&<PayMod/>}{flowMod&&<FlowMod/>}{showSaved&&<SavedMod/>}{cfgMod&&<CfgMod/>}
     <Toast msg={toast}/>
   </div>);
 }
