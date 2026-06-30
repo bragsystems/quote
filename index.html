@@ -260,10 +260,10 @@ function genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,sig
   // SUPPLY SECTIONS 1-7
   secs.forEach(sec=>{
     addPg();secBar(sec.id+". "+sec.name);
-    const cols=[{h:"#",w:7},{h:"Description",w:81},{h:"Qty",w:11},{h:"Unit",w:16},{h:"Unit Price (Rs.)",w:33},{h:"EXW Total (Rs.)",w:34}];
+    const cols=[{h:"#",w:7,al:"left"},{h:"Description",w:81,al:"left"},{h:"Qty",w:11,al:"center"},{h:"Unit",w:16,al:"center"},{h:"Unit Price (Rs.)",w:33,al:"right"},{h:"EXW Total (Rs.)",w:34,al:"right"}];
     doc.setFillColor(or,og,ob);doc.rect(M,y,W,7,"F");
     let cx=M;
-    cols.forEach(c=>{doc.setTextColor(255,255,255);doc.setFontSize(8);doc.setFont("helvetica","bold");doc.text(c.h,cx+1,y+5);cx+=c.w;});
+    cols.forEach(c=>{doc.setTextColor(255,255,255);doc.setFontSize(8);doc.setFont("helvetica","bold");const hx=c.al==="right"?cx+c.w-1:c.al==="center"?cx+c.w/2:cx+1;doc.text(c.h,hx,y+5,c.al==="right"?{align:"right"}:c.al==="center"?{align:"center"}:{});cx+=c.w;});
     y+=7;
     sec.items.forEach((item,idx)=>{
       const exwT=(item.qty||0)*(item.up||0);const hasSpec=item.specs&&item.specs.trim();const rowH=hasSpec?14:9;
@@ -291,7 +291,7 @@ function genPDF(client,quote,secs,inst,pf,freight,tax,inc,terms,cov,clo,refs,sig
   addPg();secBar("8. Installation & Erection Services");
   const iCols=[{h:"#",w:7},{h:"Description",w:95},{h:"Qty",w:11},{h:"Unit",w:16},{h:"Amount (Rs.)",w:53}];
   doc.setFillColor(or,og,ob);doc.rect(M,y,W,7,"F");let icx=M;
-  iCols.forEach(c=>{doc.setTextColor(255,255,255);doc.setFontSize(8);doc.setFont("helvetica","bold");doc.text(c.h,icx+1,y+5);icx+=c.w;});y+=7;
+  iCols.forEach((c,ci)=>{doc.setTextColor(255,255,255);doc.setFontSize(8);doc.setFont("helvetica","bold");const al=ci===4?"right":ci===2||ci===3?"center":"left";const hx=al==="right"?icx+c.w-1:al==="center"?icx+c.w/2:icx+1;doc.text(c.h,hx,y+5,al==="right"?{align:"right"}:al==="center"?{align:"center"}:{});icx+=c.w;});y+=7;
   inst.forEach((item,idx)=>{
     const v=(item.qty||0)*(item.up||0);chk(10);
     doc.setFillColor(idx%2===0?252:255,idx%2===0?252:255,idx%2===0?250:255);doc.rect(M,y,W,9,"F");
